@@ -3,11 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-// Import the Firebase app and messaging services
-import { initializeApp } from 'firebase/app';
-import { getMessaging, onBackgroundMessage } from 'firebase/messaging/sw';
+// 1. Gunakan importScripts untuk memuat library Firebase Compat dari CDN
+importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
 
-// Your web app's Firebase configuration - this is sourced from your project's config
+// 2. Konfigurasi Firebase kamu (sudah sesuai dengan milikmu)
 const firebaseConfig = {
   apiKey: "AIzaSyC1kLPJEQK1d4DKkGI80d1fjbqCJgbxvss",
   authDomain: "rumah-adiksi.firebaseapp.com",
@@ -18,22 +18,24 @@ const firebaseConfig = {
   measurementId: "G-QLMCVDC4H7"
 };
 
-// Initialize the Firebase app in the service worker
-const app = initializeApp(firebaseConfig);
-const messaging = getMessaging(app);
+// 3. Inisialisasi Firebase menggunakan sintaks compat
+firebase.initializeApp(firebaseConfig);
+
+// 4. Panggil messaging
+const messaging = firebase.messaging();
 
 /**
- * Handle background messages. When a notification is received while the app is in the background,
- * this callback will be triggered.
+ * 5. Handle background messages. 
+ * Ini akan memicu notifikasi saat aplikasi berjalan di background.
  */
-onBackgroundMessage(messaging, (payload) => {
+messaging.onBackgroundMessage((payload) => {
     console.log('[firebase-messaging-sw.js] Received background message ', payload);
 
-    // Customize the notification Title and Body
+    // Kustomisasi Judul dan Body Notifikasi
     const notificationTitle = payload.notification?.title || 'Rumah Adiksi';
     const notificationOptions = {
         body: payload.notification?.body || 'You have a new message.',
-        icon: '/logo.png' // Optional: Use your app logo
+        icon: '/logo.png' // Pastikan file logo.png benar-benar ada di folder public kamu
     };
 
     self.registration.showNotification(notificationTitle, notificationOptions);
