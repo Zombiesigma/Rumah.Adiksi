@@ -36,11 +36,13 @@ interface ShopSectionProps {
   currentUser?: FirebaseUser | null;
   addNotification?: (msg: string) => void;
   openAuthModal?: () => void;
+  setActiveTab?: (tab: string) => void;
+  cartCount?: number;
 }
 
 type ShopCategory = 'all' | 'coffee' | 'matcha' | 'tea' | 'merchandise';
 
-export default function ShopSection({ items, addToCart, currentUser, addNotification, openAuthModal }: ShopSectionProps) {
+export default function ShopSection({ items, addToCart, currentUser, addNotification, openAuthModal, setActiveTab, cartCount }: ShopSectionProps) {
   const cleanedItems = items.map(item => ({
     ...item,
     price: item.price ?? 0,
@@ -481,26 +483,46 @@ export default function ShopSection({ items, addToCart, currentUser, addNotifica
       </div>
 
       <div className="space-y-6">
-        <div className="flex flex-wrap gap-1.5 justify-center md:justify-start">
-          {[
-            { id: 'all', label: 'Semua Produk' },
-            { id: 'coffee', label: 'Kopi Nusantara' },
-            { id: 'matcha', label: 'Seri Matcha' },
-            { id: 'tea', label: 'Teh Spesialti' },
-            { id: 'merchandise', label: 'Merchandise Komunitas' }
-          ].map((cat) => (
+        <div className="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between bg-white/5 p-4 rounded-2xl border border-white/5">
+          <div className="flex flex-wrap gap-1.5 justify-center sm:justify-start">
+            {[
+              { id: 'all', label: 'Semua Produk' },
+              { id: 'coffee', label: 'Kopi Nusantara' },
+              { id: 'matcha', label: 'Seri Matcha' },
+              { id: 'tea', label: 'Teh Spesialti' },
+              { id: 'merchandise', label: 'Merchandise Komunitas' }
+            ].map((cat) => (
+              <button
+                key={cat.id}
+                onClick={() => setActiveCategory(cat.id as ShopCategory)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
+                  activeCategory === cat.id
+                    ? 'bg-brand-gold text-brand-charcoal font-bold shadow-md shadow-brand-gold/10'
+                    : 'text-gray-400 hover:text-white bg-slate-950 border border-white/5 hover:border-white/10'
+                }`}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+
+          {setActiveTab && (
             <button
-              key={cat.id}
-              onClick={() => setActiveCategory(cat.id as ShopCategory)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold cursor-pointer transition-all ${
-                activeCategory === cat.id
-                  ? 'bg-brand-gold text-brand-charcoal font-bold shadow-md shadow-brand-gold/10'
-                  : 'text-gray-400 hover:text-white bg-slate-950 border border-white/5 hover:border-white/10'
-              }`}
+              onClick={() => setActiveTab('cart')}
+              className="px-4 py-2 bg-brand-gold hover:bg-amber-500 font-bold text-xs text-brand-charcoal rounded-xl flex items-center justify-center gap-2 transition duration-300 shadow-xl shadow-brand-gold/15 active:scale-95 cursor-pointer select-none self-center sm:self-auto"
+              title="Akses Keranjang Belanja Anda"
             >
-              {cat.label}
+              <div className="relative">
+                <ShoppingBag className="w-4 h-4 stroke-[2.5]" />
+                {cartCount !== undefined && cartCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-rose-600 text-[8px] text-white px-1 leading-none rounded-full min-w-3.5 h-3.5 flex items-center justify-center font-black animate-bounce">
+                    {cartCount}
+                  </span>
+                )}
+              </div>
+              <span>Keranjang Belanja ({cartCount || 0})</span>
             </button>
-          ))}
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6" id="shop-products-grid">
