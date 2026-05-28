@@ -3,10 +3,20 @@ import crypto from 'crypto';
 import ImageKit from 'imagekit';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, runTransaction } from 'firebase/firestore';
-import firebaseConfig from '../firebase-applet-config.json';
+
+const firebaseConfig = {
+  projectId: "rumah-adiksi",
+  appId: "1:105934868931:web:d3e78fe3d17287bb3aad76",
+  apiKey: "AIzaSyC1kLPJEQK1d4DKkGI80d1fjbqCJgbxvss",
+  authDomain: "rumah-adiksi.firebaseapp.com",
+  firestoreDatabaseId: "(default)",
+  storageBucket: "rumah-adiksi.firebasestorage.app",
+  messagingSenderId: "105934868931",
+  measurementId: "G-QLMCVDC4H7"
+};
 
 const firebaseApp = initializeApp(firebaseConfig);
-const db = getFirestore(firebaseApp, (firebaseConfig as any).firestoreDatabaseId);
+const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
