@@ -18,7 +18,7 @@ const BOT_AGENTS = [
 // Default meta tags, in case something goes wrong
 const DEFAULT_TITLE = "Rumah Adiksi Kreatif";
 const DEFAULT_DESCRIPTION = "Inisiatif pemuda kreatif Pelabuhan Ratu untuk mereklamasi bakat, membentuk kecanduan positif melalui seni, budaya, dan komunitas.";
-const DEFAULT_IMAGE = "https://rumah-adiksi.web.app/logo.png"; // URL to your main logo
+const DEFAULT_IMAGE = "https://rumahadiksi.web.id/logo.png"; // URL to your main logo
 
 /**
  * Generates a basic HTML page with dynamic Open Graph (OG) meta tags.
@@ -61,7 +61,7 @@ export const dynamicMetaTagServer = functions.https.onRequest(async (req, res) =
   const contentId = requestPath[2];
 
   // Construct the full URL for redirection
-  const originalUrl = `https://rumah-adiksi.web.app/${contentType}/${contentId}`;
+  const originalUrl = `https://rumahadiksi.web.id/${contentType}/${contentId}`;
 
   // If it's not a bot, just redirect to the main app to handle routing
   if (!isBot) {
