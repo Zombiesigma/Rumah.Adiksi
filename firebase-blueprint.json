@@ -1,0 +1,197 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User account registration and permissions profile",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": {
+          "type": "string",
+          "enum": ["user", "admin"]
+        },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "CommunityPost": {
+      "title": "CommunityPost",
+      "description": "Information about community posts inside the forum section",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorField": { "type": "string" },
+        "authorAvatar": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "group": {
+          "type": "string",
+          "enum": ["Diskusi", "Kolaborasi", "Workshop", "Karya"]
+        },
+        "timestamp": { "type": "string" },
+        "likes": { "type": "integer" },
+        "likedByCurrentUser": { "type": "boolean" },
+        "comments": { "type": "array" }
+      },
+      "required": ["authorName", "title", "content", "group"]
+    },
+    "ArtEvent": {
+      "title": "ArtEvent",
+      "description": "Event on the creative hub events catalog",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "location": { "type": "string" },
+        "description": { "type": "string" },
+        "category": {
+          "type": "string",
+          "enum": ["Pameran", "Konser", "Workshop", "Bazaar"]
+        },
+        "bannerUrl": { "type": "string" },
+        "registeredCount": { "type": "integer" },
+        "isRegistered": { "type": "boolean" }
+      },
+      "required": ["title", "date", "location", "category"]
+    },
+    "GalleryItem": {
+      "title": "GalleryItem",
+      "description": "Artwork published on the creative hub",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "artistId": { "type": "string" },
+        "artistName": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["painting", "music", "photography", "craft", "digital"]
+        },
+        "price": { "type": "integer" },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "isSold": { "type": "boolean" },
+        "likes": { "type": "integer" },
+        "views": { "type": "integer" },
+        "createdDate": { "type": "string" }
+      },
+      "required": ["title", "artistName", "type", "description", "imageUrl"]
+    },
+    "ShopItem": {
+      "title": "ShopItem",
+      "description": "Product sold in the Adiksi Shop",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "category": {
+          "type": "string",
+          "enum": ["coffee", "matcha", "tea", "merchandise"]
+        },
+        "price": { "type": "integer" },
+        "description": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "rating": { "type": "number" },
+        "stock": { "type": "integer" }
+      },
+      "required": ["name", "category", "price", "description", "imageUrl", "stock"]
+    },
+    "Talent": {
+      "title": "Talent",
+      "description": "Talent profile and portfolio directory entry for artist",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "field": { "type": "string" },
+        "bio": { "type": "string" },
+        "avatarUrl": { "type": "string" },
+        "location": { "type": "string" },
+        "skills": { "type": "array" },
+        "portfolioIds": { "type": "array" },
+        "socialMedia": { "type": "object" }
+      },
+      "required": ["id", "name", "field", "bio", "location"]
+    },
+    "MeetRoom": {
+      "title": "MeetRoom",
+      "description": "Direct Google Meet active virtual rooms persisted state",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "uri": { "type": "string" },
+        "hostName": { "type": "string" },
+        "hostUid": { "type": "string" },
+        "hostAvatar": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["id", "title", "uri", "hostUid", "hostName", "isActive"]
+    },
+    "VeloraFilm": {
+      "title": "VeloraFilm",
+      "description": "Short films uploaded to Velora Adiksi cinematic portal",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "synopsis": { "type": "string" },
+        "logline": { "type": "string" },
+        "genre": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "director": { "type": "string" },
+        "releaseYear": { "type": "string" },
+        "duration": { "type": "string" },
+        "cast": { "type": "array" },
+        "uploadedBy": { "type": "string" },
+        "uploaderName": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "likes": { "type": "integer" },
+        "views": { "type": "integer" }
+      },
+      "required": ["title", "synopsis", "genre", "coverUrl", "videoUrl", "director"]
+    }
+  },
+  "firestore": {
+    "users": {
+      "schema": "UserProfile",
+      "description": "Collection of user profiles containing roles"
+    },
+    "talents": {
+      "schema": "Talent",
+      "description": "Collection of on-boarded talent profiles and portfolios"
+    },
+    "posts": {
+      "schema": "CommunityPost",
+      "description": "Collection of community discussion posts"
+    },
+    "events": {
+      "schema": "ArtEvent",
+      "description": "Collection of cultural and art events"
+    },
+    "artworks": {
+      "schema": "GalleryItem",
+      "description": "Collection of digital and physical artwork listings"
+    },
+    "shopItems": {
+      "schema": "ShopItem",
+      "description": "Collection of food, beverage, and merchandise store items"
+    },
+    "meet_rooms": {
+      "schema": "MeetRoom",
+      "description": "Collection of active Google Meet rooms generated by users/kreators"
+    },
+    "velora_films": {
+      "schema": "VeloraFilm",
+      "description": "Collection of movie documents submitted by filmmakers for screening"
+    }
+  }
+}
