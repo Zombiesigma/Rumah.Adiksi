@@ -265,7 +265,14 @@ export default function VeloraAdiksi({ addNotification }: Props) {
 
   const { getRootProps: getVideoProps, getInputProps: getVideoInputProps } = useDropzone({
     onDrop: handleVideoDrop,
-    accept: { 'video/*': [] },
+    accept: {
+      'video/mp4': ['.mp4'],
+      'video/quicktime': ['.mov', '.qt'],
+      'video/webm': ['.webm'],
+      'video/x-matroska': ['.mkv'],
+      'video/avi': ['.avi', '.divx'],
+      'video/mpeg': ['.mpeg', '.mpg']
+    },
     multiple: false
   } as any);
 
