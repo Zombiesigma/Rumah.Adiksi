@@ -330,7 +330,7 @@ export default function App() {
           case 'manifesto': return <ManifestoSection />;
           case 'gallery': return <GallerySection artworks={artworks} setArtworks={setArtworks} addToCart={(art) => handleAddToCart(art, 'gallery')} onExploreArtist={(id) => { setSelectedTalentId(id); setActiveTab('talents'); }} currentUser={currentUser} openAuthModal={() => setAuthModalOpen(true)} />;
           case 'talents': return <TalentSection talents={talents} artworks={artworks} selectedTalentId={selectedTalentId} setSelectedTalentId={setSelectedTalentId} setActiveTab={setActiveTab} onExploreArtDetail={() => setActiveTab('gallery')} />;
-          case 'shop': return <ShopSection items={shopItems} addToCart={(item) => handleAddToCart(item, 'shop')} currentUser={currentUser} addNotification={addNotification} openAuthModal={() => setAuthModalOpen(true)} />;
+          case 'shop': return <ShopSection items={shopItems} addToCart={(item) => handleAddToCart(item, 'shop')} currentUser={currentUser} addNotification={addNotification} openAuthModal={() => setAuthModalOpen(true)} setActiveTab={setActiveTab} cartCount={cartCount} />;
           case 'community': return <CommunitySection posts={posts} setPosts={setPosts} currentUser={currentUser} userRole={userRole} openAuthModal={() => setAuthModalOpen(true)} artworks={artworks} />;
           case 'events': return <EventsSection events={events} setEvents={setEvents} notifications={[]} addNotification={addNotification} clearNotifications={() => {}} />;
           case 'velora': return <VeloraAdiksiUploader addNotification={addNotification} />;
@@ -423,7 +423,7 @@ export default function App() {
 
           {/* Luxury Tab Navigation Items */}
           <nav className="flex items-center gap-0.5 xl:gap-1.5 bg-slate-950/70 p-1 xl:p-1.5 rounded-2xl border border-white/5 shadow-inner">
-            {navigationItems.filter(nav => nav.id !== 'profile').map(nav => {
+            {navigationItems.map(nav => {
               const isActive = activeTab === nav.id;
               return (
                 <button 
@@ -558,7 +558,7 @@ export default function App() {
       </main>
       
       <BottomNavBar activeTab={activeTab} setActiveTab={setActiveTab} onMenuOpen={() => setMenuSheetOpen(true)} />
-      <MenuSheet isOpen={isMenuSheetOpen} onClose={() => setMenuSheetOpen(false)} setActiveTab={setActiveTab} currentUser={currentUser} handleLogout={handleLogout} onOpenAuthModal={() => setAuthModalOpen(true)} />
+      <MenuSheet isOpen={isMenuSheetOpen} onClose={() => setMenuSheetOpen(false)} setActiveTab={setActiveTab} currentUser={currentUser} userRole={userRole} handleLogout={handleLogout} onOpenAuthModal={() => setAuthModalOpen(true)} />
 
       {showFooter && <AppFooter setActiveTab={setActiveTab} />}
 
