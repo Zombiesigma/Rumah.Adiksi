@@ -1,15 +1,13 @@
 {
+  "version": 2,
   "rewrites": [
     {
-      "source": "/((?!api/|_next/|static/|images/|favicon.ico|logo.svg).*)",
-      "has": [
-        {
-          "type": "header",
-          "key": "User-Agent",
-          "value": "(.*)(facebookexternalhit|Facebot|Twitterbot|Pinterest|Googlebot|Slackbot|Discordbot|WhatsApp|Telegram)(.*)"
-        }
-      ],
-      "destination": "/api/metatags"
+      "source": "/api/(.*)",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
