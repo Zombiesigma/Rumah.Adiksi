@@ -1,8 +1,12 @@
 import express, { Request, Response } from 'express';
 import crypto from 'crypto';
 import ImageKit from 'imagekit';
-import { db } from '../src/lib/firebase';
-import { doc, getDoc, setDoc, updateDoc, runTransaction } from 'firebase/firestore';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, doc, getDoc, setDoc, updateDoc, runTransaction } from 'firebase/firestore';
+import firebaseConfig from '../firebase-applet-config.json';
+
+const firebaseApp = initializeApp(firebaseConfig);
+const db = getFirestore(firebaseApp, (firebaseConfig as any).firestoreDatabaseId);
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
