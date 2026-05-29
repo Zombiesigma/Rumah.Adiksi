@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Palette, Users, ShoppingBag, MessageSquare, MessageCircle, Coffee, Calendar, Home, Scroll, Award, Menu, LogIn, LogOut, User as UserIcon, Phone, Mail, MapPin, Instagram, Youtube, Film } from 'lucide-react';
+import { Palette, Users, ShoppingBag, MessageSquare, MessageCircle, Coffee, Calendar, Home, Scroll, Award, Menu, LogIn, LogOut, User as UserIcon, Phone, Mail, MapPin, Instagram, Youtube, Film, ChevronDown } from 'lucide-react';
 import { Talent, GalleryItem, ShopItem, CartItem, CommunityPost, ArtEvent } from './types';
 import { registerFcmToken, triggerNotificationBridge } from './lib/notificationBridge';
 import { showSuccessToast, showConfirmDialog } from './lib/alerts';
@@ -214,6 +214,7 @@ export default function App() {
     });
   };
   const [isMenuSheetOpen, setMenuSheetOpen] = useState(false);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
   // Global State
   const [talents, setTalents] = useState<Talent[]>([]);
@@ -326,18 +327,20 @@ export default function App() {
   
   const cartCount = cart.reduce((acc, item) => acc + item.quantity, 0);
 
-  const navigationItems = [
+  const primaryNavigationItems = [
     { id: 'beranda', label: 'Beranda', icon: Home },
-    { id: 'manifesto', label: 'Manifesto', icon: Scroll },
     { id: 'gallery', label: 'Galeri', icon: Palette },
-    { id: 'talents', label: 'Bakat', icon: Users },
     { id: 'shop', label: 'Toko', icon: Coffee },
-    { id: 'community', label: 'Komunitas', icon: MessageSquare },
+    { id: 'community', label: 'Forum', icon: MessageSquare },
+    { id: 'talents', label: 'Bakat', icon: Users },
     { id: 'chat', label: 'Chat', icon: MessageCircle },
-    { id: 'events', label: 'Acara', icon: Calendar },
-    { id: 'velora', label: 'Velora Adiksi', icon: Film },
-    { id: 'profile', label: 'Profil', icon: UserIcon },
-    ...(userRole === 'admin' ? [{ id: 'admin', label: 'Admin', icon: Award }] : [])
+  ];
+
+  const secondaryNavigationItems = [
+    { id: 'events', label: 'Acara Seni', icon: Calendar, description: 'Jadwal Pameran & Festival Kolektif' },
+    { id: 'velora', label: 'Velora Adiksi', icon: Film, description: 'Eksplorasi Video Pendek Kreator' },
+    { id: 'manifesto', label: 'Manifesto', icon: Scroll, description: 'Landasan Perjuangan Seni Adiksi' },
+    ...(userRole === 'admin' ? [{ id: 'admin', label: 'Admin Panel', icon: Award, description: 'Sistem Kontrol & Moderator' }] : [])
   ];
 
   const renderContent = () => {
@@ -449,7 +452,7 @@ export default function App() {
 
           {/* Luxury Tab Navigation Items */}
           <nav className="flex items-center gap-0.5 xl:gap-1.5 bg-slate-950/70 p-1 xl:p-1.5 rounded-2xl border border-white/5 shadow-inner">
-            {navigationItems.map(nav => {
+            {primaryNavigationItems.map(nav => {
               const isActive = activeTab === nav.id;
               return (
                 <button 
@@ -474,6 +477,72 @@ export default function App() {
                 </button>
               );
             })}
+
+            {/* Elegant Dropdown for Secondary Navigation Items */}
+            <div 
+              className="relative"
+              onMouseEnter={() => setIsDropdownOpen(true)}
+              onMouseLeave={() => setIsDropdownOpen(false)}
+            >
+              <button 
+                onClick={() => setIsDropdownOpen(prev => !prev)}
+                className={`relative px-2 xl:px-3.5 py-1.5 xl:py-2 rounded-xl text-[9.5px] xl:text-[10.5px] font-extrabold uppercase tracking-widest flex items-center gap-1 xl:gap-2 transition-all duration-300 cursor-pointer select-none ${
+                  secondaryNavigationItems.some(i => activeTab === i.id) 
+                    ? 'text-brand-gold font-bold' 
+                    : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                }`}
+              >
+                {secondaryNavigationItems.some(i => activeTab === i.id) && (
+                  <div className="absolute inset-0 bg-brand-gold/[0.08] border border-brand-gold/25 rounded-xl" />
+                )}
+                <ChevronDown size={11} className={`transition-transform duration-300 ${isDropdownOpen ? 'rotate-180 text-brand-gold' : 'text-gray-550'}`} />
+                <span>Program</span>
+                {secondaryNavigationItems.some(i => activeTab === i.id) && (
+                  <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-0.5 bg-brand-gold rounded-full" />
+                )}
+              </button>
+
+              <AnimatePresence>
+                {isDropdownOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 15, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 15, scale: 0.95 }}
+                    transition={{ duration: 0.2, ease: "easeOut" }}
+                    className="absolute right-0 top-full mt-2 w-72 bg-slate-950/95 backdrop-blur-2xl border border-white/10 rounded-2xl p-2.5 shadow-[0_20px_50px_rgba(0,0,0,0.85)] z-50 flex flex-col gap-1 ring-1 ring-white/5"
+                  >
+                    <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-brand-gold/30 to-transparent" />
+                    {secondaryNavigationItems.map(item => {
+                      const isItemActive = activeTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setActiveTab(item.id);
+                            setIsDropdownOpen(false);
+                          }}
+                          className={`flex items-start gap-4 p-3 rounded-xl transition duration-250 text-left select-none cursor-pointer border ${
+                            isItemActive 
+                              ? 'bg-brand-gold/[0.08] border-brand-gold/25 text-brand-gold shadow-[0_0_15px_rgba(217,119,6,0.1)]' 
+                              : 'bg-transparent border-transparent text-gray-300 hover:bg-white/5 hover:text-white'
+                          }`}
+                        >
+                          <item.icon size={14} className={`shrink-0 mt-0.5 ${isItemActive ? 'text-brand-gold' : 'text-gray-400'}`} />
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-[10px] font-black uppercase tracking-wider font-sans">
+                              {item.label}
+                            </span>
+                            <span className="text-[9px] text-gray-500 font-medium font-sans normal-case tracking-normal">
+                              {item.description}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </nav>
 
           {/* Right Controls Area mapping Profile & Cart */}
