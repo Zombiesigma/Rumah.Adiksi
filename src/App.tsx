@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Palette, Users, ShoppingBag, MessageSquare, Coffee, Calendar, Home, Scroll, Award, Menu, LogIn, LogOut, User as UserIcon, Phone, Mail, MapPin, Instagram, Youtube, Film } from 'lucide-react';
+import { Palette, Users, ShoppingBag, MessageSquare, MessageCircle, Coffee, Calendar, Home, Scroll, Award, Menu, LogIn, LogOut, User as UserIcon, Phone, Mail, MapPin, Instagram, Youtube, Film } from 'lucide-react';
 import { Talent, GalleryItem, ShopItem, CartItem, CommunityPost, ArtEvent } from './types';
 import { registerFcmToken, triggerNotificationBridge } from './lib/notificationBridge';
 import { showSuccessToast, showConfirmDialog } from './lib/alerts';
@@ -21,6 +21,7 @@ import SplashScreen from './components/SplashScreen';
 import AboutUs from './components/AboutUs';
 import MenuSheet from './components/MenuSheet';
 import VeloraAdiksiUploader from './components/VeloraAdiksi';
+import ChatSection from './components/ChatSection';
 
 // Firebase imports
 import { auth, db } from './lib/firebase';
@@ -170,6 +171,18 @@ export default function App() {
   const [activeTab, setActiveTabState] = useState<string>('beranda');
   const [slideDirection, setSlideDirection] = useState<number>(1);
 
+  const [chatTarget, setChatTarget] = useState<{
+    userId?: string | null;
+    userName?: string | null;
+    userAvatar?: string | null;
+    roomId?: string | null;
+  }>({});
+
+  const startChat = (target: { userId?: string | null; userName?: string | null; userAvatar?: string | null; roomId?: string | null }) => {
+    setChatTarget(target);
+    setActiveTab('chat');
+  };
+
   const getTabIndex = (tabId: string) => {
     const tabsOrder = [
       'beranda',
@@ -179,6 +192,7 @@ export default function App() {
       'talents',
       'shop',
       'community',
+      'chat',
       'events',
       'velora',
       'profile',
@@ -318,6 +332,7 @@ export default function App() {
     { id: 'talents', label: 'Bakat', icon: Users },
     { id: 'shop', label: 'Toko', icon: Coffee },
     { id: 'community', label: 'Komunitas', icon: MessageSquare },
+    { id: 'chat', label: 'Chat', icon: MessageCircle },
     { id: 'events', label: 'Acara', icon: Calendar },
     { id: 'velora', label: 'Velora Adiksi', icon: Film },
     { id: 'profile', label: 'Profil', icon: UserIcon },
@@ -328,14 +343,24 @@ export default function App() {
       switch(activeTab) {
           case 'beranda': return <HomeSection talents={talents} artworks={artworks} shopItems={shopItems} events={events} posts={posts} setActiveTab={setActiveTab} onSelectTalent={(t) => { setSelectedTalentId(t.id); setActiveTab('talents'); }} addToCart={(item) => handleAddToCart(item, 'shop')} />;
           case 'manifesto': return <ManifestoSection />;
-          case 'gallery': return <GallerySection artworks={artworks} setArtworks={setArtworks} addToCart={(art) => handleAddToCart(art, 'gallery')} onExploreArtist={(id) => { setSelectedTalentId(id); setActiveTab('talents'); }} currentUser={currentUser} openAuthModal={() => setAuthModalOpen(true)} userRole={userRole} />;
-          case 'talents': return <TalentSection talents={talents} artworks={artworks} selectedTalentId={selectedTalentId} setSelectedTalentId={setSelectedTalentId} setActiveTab={setActiveTab} onExploreArtDetail={() => setActiveTab('gallery')} />;
+          case 'gallery': return <GallerySection artworks={artworks} setArtworks={setArtworks} addToCart={(art) => handleAddToCart(art, 'gallery')} onExploreArtist={(id) => { setSelectedTalentId(id); setActiveTab('talents'); }} currentUser={currentUser} openAuthModal={() => setAuthModalOpen(true)} userRole={userRole} startChat={startChat} />;
+          case 'talents': return <TalentSection talents={talents} artworks={artworks} selectedTalentId={selectedTalentId} setSelectedTalentId={setSelectedTalentId} setActiveTab={setActiveTab} onExploreArtDetail={() => setActiveTab('gallery')} startChat={startChat} />;
           case 'shop': return <ShopSection items={shopItems} addToCart={(item) => handleAddToCart(item, 'shop')} currentUser={currentUser} addNotification={addNotification} openAuthModal={() => setAuthModalOpen(true)} setActiveTab={setActiveTab} cartCount={cartCount} />;
-          case 'community': return <CommunitySection posts={posts} setPosts={setPosts} currentUser={currentUser} userRole={userRole} openAuthModal={() => setAuthModalOpen(true)} artworks={artworks} />;
+          case 'community': return <CommunitySection posts={posts} setPosts={setPosts} currentUser={currentUser} userRole={userRole} openAuthModal={() => setAuthModalOpen(true)} artworks={artworks} startChat={startChat} />;
+          case 'chat': return (
+            <ChatSection 
+              currentUser={currentUser}
+              openAuthModal={() => setAuthModalOpen(true)}
+              initialTargetUserId={chatTarget?.userId || undefined}
+              initialTargetUserName={chatTarget?.userName || undefined}
+              initialTargetRoomId={chatTarget?.roomId || undefined}
+              onClearInitialTargets={() => setChatTarget({})}
+            />
+          );
           case 'events': return <EventsSection events={events} setEvents={setEvents} notifications={[]} addNotification={addNotification} clearNotifications={() => {}} />;
           case 'velora': return <VeloraAdiksiUploader addNotification={addNotification} />;
           case 'cart': return <CartCheckout cart={cart} setCart={setCart} clearCart={() => setCart([])} addNotification={addNotification} setActiveTab={setActiveTab} currentUser={currentUser} />;
-          case 'profile': return <ProfileSection currentUser={currentUser} userRole={userRole} talents={talents} artworks={artworks} openAuthModal={() => setAuthModalOpen(true)} triggerToast={addNotification} setActiveTab={setActiveTab} />;
+          case 'profile': return <ProfileSection currentUser={currentUser} userRole={userRole} talents={talents} artworks={artworks} openAuthModal={() => setAuthModalOpen(true)} triggerToast={addNotification} setActiveTab={setActiveTab} startChat={startChat} />;
           case 'admin': {
               if (userRole === 'admin') {
                   return <AdminSection addNotification={addNotification} setActiveTab={setActiveTab} />;
