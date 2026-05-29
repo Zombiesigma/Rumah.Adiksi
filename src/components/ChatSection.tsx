@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { upload } from '@imagekit/react';
 import {
   Send,
   MessageCircle,
@@ -25,7 +26,10 @@ import {
   MessageSquare,
   Shield,
   Palette,
-  Briefcase
+  Briefcase,
+  Camera,
+  Loader,
+  Maximize2
 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { User as FirebaseUser } from 'firebase/auth';
@@ -80,6 +84,7 @@ interface ChatMessage {
   text: string;
   timestamp: any;
   isSystem?: boolean;
+  imageUrl?: string;
 }
 
 export default function ChatSection({
@@ -100,6 +105,10 @@ export default function ChatSection({
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [creatorsList, setCreatorsList] = useState<any[]>([]);
   const [isMobilePaneOpen, setIsMobilePaneOpen] = useState(false); // Controls view toggle on mobile
+
+  const [photoUrl, setPhotoUrl] = useState<string>('');
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState<boolean>(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -294,15 +303,59 @@ export default function ChatSection({
     }
   };
 
+  // Upload Chat Photo
+  const handleUploadChatPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert("Ukuran gambar melebihi 10MB. Silakan pilih berkas yang lebih kecil.");
+      return;
+    }
+
+    setIsUploadingPhoto(true);
+    try {
+      const response = await fetch('/api/imagekit-auth');
+      if (!response.ok) {
+        throw new Error(`Authentication request failed with status ${response.status}`);
+      }
+      const authData = await response.json();
+      
+      const meta = import.meta as any;
+      const publicKey = meta.env?.VITE_IMAGEKIT_PUBLIC_KEY || "public_MEe5oaZyE+U9OClfeDX6JU/n1kw=";
+      
+      const result = await upload({
+        file: file,
+        fileName: file.name,
+        publicKey: publicKey,
+        signature: authData.signature,
+        token: authData.token,
+        expire: authData.expire,
+        folder: "chat_photos",
+      });
+
+      setPhotoUrl(result.url);
+    } catch (err: any) {
+      console.error("Gagal mengunggah foto:", err);
+      alert("Gagal mengunggah foto: " + (err.message || "Terdapat kendala koneksi atau otorisasi ImageKit"));
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
   // Submit text message
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUser || !selectedRoom || !inputText.trim()) return;
+    if (!currentUser || !selectedRoom) return;
+    if (!inputText.trim() && !photoUrl) return;
 
     const currentText = inputText.trim();
-    setInputText('');
+    const currentPhotoUrl = photoUrl;
 
-    const messagePayload = {
+    setInputText('');
+    setPhotoUrl('');
+
+    const messagePayload: any = {
       senderId: currentUser.uid,
       senderName: currentUser.displayName || 'Anggota Adiksi',
       senderAvatar: currentUser.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150',
@@ -311,15 +364,24 @@ export default function ChatSection({
       isSystem: false
     };
 
+    if (currentPhotoUrl) {
+      messagePayload.imageUrl = currentPhotoUrl;
+    }
+
     try {
       // Add message to room subcollection
       const messagesColRef = collection(db, 'chats', selectedRoom.id, 'messages');
       await addDoc(messagesColRef, messagePayload);
 
+      let docText = currentText;
+      if (currentPhotoUrl) {
+        docText = currentText ? `📷 ${currentText}` : '📷 Membagikan Foto/Karya';
+      }
+
       // Update room metadata for sidebar sorting
       const roomRef = doc(db, 'chats', selectedRoom.id);
       await updateDoc(roomRef, {
-        lastMessage: currentText,
+        lastMessage: docText,
         lastMessageTime: new Date().toISOString(),
         lastMessageSenderId: currentUser.uid
       });
@@ -365,7 +427,7 @@ export default function ChatSection({
   });
 
   return (
-    <div className="max-w-6xl mx-auto py-2 px-0 sm:px-4">
+    <div className="w-full max-w-7xl mx-auto px-2 md:px-6 py-4 pb-28 md:pb-6 font-sans">
       {!currentUser ? (
         <div className="py-20 text-center max-w-md mx-auto space-y-6">
           <div className="relative">
@@ -388,7 +450,7 @@ export default function ChatSection({
           </button>
         </div>
       ) : (
-        <div id="adiksi-messenger-frame" className="bg-slate-950/45 rounded-3xl border border-white/5 overflow-hidden h-[640px] flex shadow-2xl relative">
+        <div id="adiksi-messenger-frame" className="bg-slate-950/60 backdrop-blur-md rounded-3xl border border-white/10 overflow-hidden h-[calc(100vh-210px)] md:h-[calc(100vh-190px)] min-h-[500px] max-h-[820px] flex shadow-2xl relative">
           
           {/* SIDEBAR: List Chat rooms (Visible on Desktop always, on Mobile only when no chat is focused) */}
           <div className={`w-full md:w-[320px] lg:w-[360px] border-r border-white/5 flex flex-col shrink-0 ${isMobilePaneOpen ? 'hidden md:flex' : 'flex'}`}>
@@ -574,24 +636,84 @@ export default function ChatSection({
                               </span>
                             )}
 
-                            <div
-                              className={`p-3 rounded-2xl text-[12px] font-sans leading-relaxed shadow-md whitespace-pre-wrap ${
-                                isMe
-                                  ? 'bg-brand-gold text-brand-charcoal font-semibold rounded-br-none'
-                                  : 'bg-brand-card text-gray-200 border border-white/5 rounded-bl-none'
-                              }`}
-                            >
-                              <p>{msg.text}</p>
-                              
-                              <div className="flex justify-end items-center gap-1 mt-1">
-                                <span className={`text-[9px] font-mono ${isMe ? 'text-brand-charcoal/70' : 'text-gray-500'}`}>
-                                  {formatTime(msg.timestamp)}
-                                </span>
-                                {isMe && (
-                                  <CheckCheck className="w-3 h-3 text-brand-charcoal/80" />
-                                )}
+                            {msg.imageUrl ? (
+                              /* LUXURY PRESS IMAGE BUBBLE */
+                              <div
+                                className={`overflow-hidden rounded-2xl shadow-xl transition-all duration-300 hover:shadow-[0_0_25px_rgba(217,119,6,0.12)] border select-none group max-w-xs sm:max-w-sm md:max-w-md ${
+                                  isMe
+                                    ? 'bg-slate-950/80 border-brand-gold/30 hover:border-brand-gold/50 rounded-br-none'
+                                    : 'bg-slate-950/80 border-white/10 hover:border-brand-gold/30 rounded-bl-none'
+                                }`}
+                              >
+                                <div 
+                                  onClick={() => setLightboxUrl(msg.imageUrl || null)}
+                                  className="relative overflow-hidden cursor-pointer bg-black/40"
+                                >
+                                  {/* Golden Reflection Sheet */}
+                                  <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-brand-gold/50 to-transparent z-10" />
+                                  <img
+                                    src={msg.imageUrl}
+                                    alt="Shared Masterpiece"
+                                    className="max-h-64 sm:max-h-80 w-full object-cover transition-all duration-700 ease-out group-hover:scale-[1.03]"
+                                  />
+                                  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/85 via-transparent to-black/10 transition-opacity" />
+                                  
+                                  {/* "Zoom" trigger button on image hover */}
+                                  <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 backdrop-blur-[1.5px]">
+                                    <span className="p-2.5 bg-brand-gold text-brand-charcoal rounded-full shadow-2xl transform scale-90 group-hover:scale-100 transition-all duration-300 flex items-center gap-1.5 text-[9px] font-mono font-black uppercase tracking-wider">
+                                      <Maximize2 className="w-3.5 h-3.5 stroke-[3px]" /> PERBESAR KARYA
+                                    </span>
+                                  </div>
+                                  
+                                  {/* Golden Sparkle badge */}
+                                  <span className="absolute top-2 right-2 px-2 py-0.5 bg-black/75 border border-brand-gold/30 rounded text-[8px] font-mono font-black tracking-widest text-brand-gold uppercase backdrop-blur-sm z-10 flex items-center gap-1 scale-90">
+                                    <span className="w-1 h-1 rounded-full bg-brand-gold animate-ping" /> KARYA
+                                  </span>
+                                </div>
+
+                                {/* Text & Meta Section for Image */}
+                                <div className="p-3 bg-slate-950/50 border-t border-white/5">
+                                  {msg.text && (
+                                    <p className="text-[12px] font-sans text-gray-200 mb-2 leading-relaxed whitespace-pre-wrap font-medium">
+                                      {msg.text}
+                                    </p>
+                                  )}
+                                  <div className="flex justify-between items-center gap-3">
+                                    <span className="text-[8px] font-mono text-brand-gold/60 uppercase tracking-widest font-black">
+                                      Koneksi Adiksi
+                                    </span>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[9px] font-mono text-gray-500">
+                                        {formatTime(msg.timestamp)}
+                                      </span>
+                                      {isMe && (
+                                        <CheckCheck className="w-3.5 h-3.5 text-brand-gold/85" />
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
-                            </div>
+                            ) : (
+                              /* LUXURY STANDALONE TEXT BUBBLE */
+                              <div
+                                className={`p-3 rounded-2xl text-[12px] font-sans leading-relaxed shadow-md whitespace-pre-wrap transition-all duration-300 ${
+                                  isMe
+                                    ? 'bg-gradient-to-br from-brand-gold to-amber-500 text-brand-charcoal font-semibold rounded-br-none shadow-brand-gold/10 hover:brightness-105'
+                                    : 'bg-gradient-to-br from-slate-900 to-brand-card text-gray-200 border border-white/5 rounded-bl-none hover:border-white/10'
+                                }`}
+                              >
+                                <p>{msg.text}</p>
+                                
+                                <div className="flex justify-end items-center gap-1 mt-1.5 opacity-80">
+                                  <span className={`text-[9px] font-mono ${isMe ? 'text-brand-charcoal/70' : 'text-gray-500'}`}>
+                                    {formatTime(msg.timestamp)}
+                                  </span>
+                                  {isMe && (
+                                    <CheckCheck className="w-3.5 h-3.5 text-brand-charcoal/80" />
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
@@ -606,23 +728,80 @@ export default function ChatSection({
                   <div ref={messagesEndRef} />
                 </div>
 
+                {/* Floating Preview for Uploaded Photo inside active chat */}
+                <AnimatePresence>
+                  {photoUrl && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="px-4 py-3 bg-slate-950/90 border-t border-brand-gold/30 flex items-center justify-between gap-3 backdrop-blur-md"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="relative w-12 h-12 rounded-lg overflow-hidden border border-brand-gold/50 bg-black shadow-lg">
+                          <img src={photoUrl} alt="Upload preview thumbnail" className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-brand-gold/10 mix-blend-color-dodge" />
+                        </div>
+                        <div>
+                          <p className="text-[10px] font-mono font-bold text-brand-gold uppercase tracking-wider flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-brand-gold animate-pulse" /> Karya Siap Dikirim
+                          </p>
+                          <p className="text-[9px] text-gray-500 font-sans truncate max-w-[200px] sm:max-w-xs">{photoUrl}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPhotoUrl('')}
+                        className="p-1.5 bg-white/5 hover:bg-rose-500 hover:text-white border border-white/10 hover:border-transparent text-gray-400 rounded-lg transition cursor-pointer"
+                        title="Hapus foto"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 {/* Submit Input bar */}
                 <form
                   onSubmit={handleSendMessage}
-                  className="p-3 border-t border-white/5 bg-slate-950 flex items-center gap-3"
+                  className="p-3 border-t border-white/5 bg-slate-950 flex items-center gap-3 relative"
                 >
+                  {/* Image Attachment Trigger */}
+                  <div className="relative shrink-0 flex items-center">
+                    <input
+                      type="file"
+                      id="chat-photo-input"
+                      accept="image/*"
+                      onChange={handleUploadChatPhoto}
+                      className="hidden"
+                      disabled={isUploadingPhoto}
+                    />
+                    <label
+                      htmlFor="chat-photo-input"
+                      className={`p-2.5 bg-white/5 hover:bg-brand-gold/25 border border-white/5 hover:border-brand-gold/30 text-gray-400 hover:text-brand-gold rounded-xl transition-all cursor-pointer relative flex items-center justify-center active:scale-95 ${isUploadingPhoto ? 'animate-pulse' : ''}`}
+                      title="Kirim Gambar Mahakarya"
+                    >
+                      {isUploadingPhoto ? (
+                        <Loader className="w-4 h-4 animate-spin text-brand-gold" />
+                      ) : (
+                        <Camera className="w-4 h-4" />
+                      )}
+                    </label>
+                  </div>
+
                   <input
                     type="text"
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
-                    placeholder="Ketik pesan apresiasi, diskusi, atau kolaborasi Anda di sini..."
+                    placeholder={isUploadingPhoto ? "Sedang memproses foto..." : "Ketik pesan apresiasi, diskusi, atau kolaborasi Anda..."}
                     className="flex-1 bg-slate-900 border border-white/5 rounded-2xl py-2.5 px-4 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-brand-gold/60 font-sans"
                     maxLength={1000}
+                    disabled={isUploadingPhoto}
                   />
                   <button
                     type="submit"
-                    disabled={!inputText.trim()}
-                    className="p-2.5 bg-brand-gold hover:bg-amber-500 text-brand-charcoal disabled:opacity-40 disabled:hover:bg-brand-gold rounded-xl transition cursor-pointer shrink-0 scroll-smooth active:scale-95"
+                    disabled={(!inputText.trim() && !photoUrl) || isUploadingPhoto}
+                    className="p-2.5 bg-brand-gold hover:bg-amber-500 text-brand-charcoal disabled:opacity-40 disabled:hover:bg-brand-gold rounded-xl transition cursor-pointer shrink-0 scroll-smooth active:scale-95 flex items-center justify-center"
                     title="Kirim pesan"
                   >
                     <Send className="w-4 h-4" />
@@ -699,6 +878,55 @@ export default function ChatSection({
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* LUXURIOUS LIGHTBOX SPECTACLE FOR SHARED MASTERPIECES */}
+      <AnimatePresence>
+        {lightboxUrl && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl no-print"
+          >
+            <div className="absolute inset-0 cursor-gradient-out cursor-zoom-out" onClick={() => setLightboxUrl(null)} />
+            
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative max-w-4xl max-h-[85vh] flex flex-col items-center justify-center"
+            >
+              <div className="absolute -top-12 left-0 right-0 flex justify-between items-center px-1 z-10">
+                <span className="text-white text-xs font-mono font-bold tracking-widest uppercase flex items-center gap-1 bg-brand-gold/10 border border-brand-gold/20 px-3 py-1 rounded-full text-brand-gold shadow-lg">
+                  <Sparkles className="w-3.5 h-3.5 animate-pulse text-brand-gold" /> MAHASENI ADIKSI
+                </span>
+                
+                <button
+                  onClick={() => setLightboxUrl(null)}
+                  className="p-2 bg-white/5 hover:bg-rose-500 hover:text-white text-gray-300 border border-white/10 hover:border-transparent rounded-full shadow-lg transition duration-300 transform hover:rotate-90 cursor-pointer"
+                  title="Tutup Detil"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="relative p-1 bg-gradient-to-r from-brand-gold via-amber-500 to-yellow-500 rounded-3xl shadow-[0_0_50px_rgba(217,119,6,0.35)] group overflow-hidden">
+                <div className="absolute -inset-1 bg-gradient-to-r from-brand-gold/50 via-amber-500/50 to-yellow-500/50 rounded-3xl blur opacity-35 group-hover:opacity-60 transition duration-1000" />
+                <motion.img
+                  layoutId="spectacle-shared-image"
+                  src={lightboxUrl}
+                  alt="Shared Artwork Spectacular"
+                  className="max-w-full max-h-[75vh] object-contain rounded-2xl relative z-10 border border-white/5"
+                />
+              </div>
+
+              <p className="text-[10px] text-gray-400 font-mono mt-4 text-center tracking-wide uppercase">
+                Ketuk di luar gambar untuk menutup • Karya seni ini mengalir dalam detak Komunitas Adiksi
+              </p>
+            </motion.div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>
