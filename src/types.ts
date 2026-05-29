@@ -16,6 +16,16 @@ export interface GalleryItem {
   likes: number;
   views: number;
   createdDate: string;
+  awards?: string[]; // E.g., ["Kurasi Utama", "Bintang Komunitas"]
+  likedBy?: string[]; // Array of user UIDs who liked this artwork
+  ratings?: {
+    id: string;
+    authorName: string;
+    authorUid: string;
+    score: number; // 1-5
+    comment: string;
+    timestamp: string;
+  }[];
 }
 
 export interface Talent {
