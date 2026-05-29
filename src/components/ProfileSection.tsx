@@ -28,11 +28,15 @@ import {
   Share2,
   Video,
   ShoppingBag,
-  Clock
+  Clock,
+  ArrowLeft,
+  Users,
+  Palette,
+  MessageSquare
 } from 'lucide-react';
 import { Talent, GalleryItem } from '../types';
 import { db, auth, handleFirestoreError, OperationType, cleanUndefined } from '../lib/firebase';
-import { doc, setDoc, deleteDoc, collection, query, where, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, deleteDoc, collection, query, where, onSnapshot, updateDoc, addDoc } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';
 import { showSuccessToast, showConfirmDialog, showErrorToast } from '../lib/alerts';
 import CloudUploader from './CloudUploader';
@@ -45,6 +49,7 @@ interface ProfileSectionProps {
   openAuthModal: () => void;
   triggerToast: (msg: string) => void;
   setActiveTab: (tab: string) => void;
+  startChat?: (target: { userId?: string | null; userName?: string | null; userAvatar?: string | null; roomId?: string | null }) => void;
 }
 
 export default function ProfileSection({
@@ -54,11 +59,12 @@ export default function ProfileSection({
   artworks,
   openAuthModal,
   triggerToast,
-  setActiveTab
+  setActiveTab,
+  startChat
 }: ProfileSectionProps) {
   const [loading, setLoading] = useState(false);
   const [showArtworkForm, setShowArtworkForm] = useState(false);
-  const [viewMode, setViewMode] = useState<'public' | 'editor'>('public');
+  const [viewMode, setViewMode] = useState<'public' | 'editor' | 'dashboard'>('public');
 
   const [profileName, setProfileName] = useState('');
   const [profileField, setProfileField] = useState('Seni Rupa');
@@ -131,6 +137,100 @@ export default function ProfileSection({
 
     return () => unsub();
   }, [currentUser]);
+
+  const [myPosts, setMyPosts] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const q = query(
+      collection(db, 'posts'),
+      where('authorUid', '==', currentUser.uid)
+    );
+    const unsub = onSnapshot(q, (snapshot) => {
+      const postsData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setMyPosts(postsData);
+    }, (error) => {
+      console.error("Gagal mendapatkan posts saya:", error);
+    });
+    return () => unsub();
+  }, [currentUser]);
+
+  const handleLaunchCollaboration = async (post: any) => {
+    if (!currentUser) return;
+    try {
+      setLoading(true);
+      
+      // 1. Update the post status to 'running'
+      const postRef = doc(db, 'posts', post.id);
+      await updateDoc(postRef, {
+        status: 'running'
+      });
+      
+      // 2. Identify participants
+      const memberUids = Object.values(post.collaborativeMemberUids || {}) as string[];
+      const uniqueParticipants = Array.from(new Set([currentUser.uid, ...memberUids])).filter(uid => !!uid);
+      
+      // 3. Setup Group Chat metadata
+      const groupId = `group_${post.id}`;
+      const groupChatPayload = {
+        id: groupId,
+        type: 'group',
+        title: `🎨 Kolaborasi: ${post.title}`,
+        avatarUrl: post.imageUrl || 'https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=150',
+        participants: uniqueParticipants,
+        participantNames: {
+          [currentUser.uid]: currentUser.displayName || 'Kreator Adiksi',
+          ...Object.entries(post.collaborativeMembers || {}).reduce((acc: any, [role, name]: any) => {
+            const uId = post.collaborativeMemberUids?.[role];
+            if (uId) {
+              acc[uId] = name;
+            }
+            return acc;
+          }, {})
+        },
+        participantAvatars: {
+          [currentUser.uid]: currentUser.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150'
+        },
+        lastMessage: 'Proyek resmi dimulai! Chat grup telah dibuka! 🚀',
+        lastMessageTime: new Date().toISOString(),
+        lastMessageSenderId: currentUser.uid,
+        createdAt: new Date().toISOString(),
+        associatedPostId: post.id,
+        status: 'running'
+      };
+      
+      // Save metadata
+      const chatDocRef = doc(db, 'chats', groupId);
+      await setDoc(chatDocRef, groupChatPayload);
+      
+      // 4. Send automated first message to subcollection messages
+      const msgRef = collection(db, 'chats', groupId, 'messages');
+      await addDoc(msgRef, {
+        senderId: currentUser.uid,
+        senderName: 'Sistem Adiksi',
+        senderAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150',
+        text: `PROYEK DI GAS SEKARANG! 🚀: Kolaborasi '${post.title}' resmi diluncurkan oleh ${currentUser.displayName}! Mari berdiskusi tentang tahap selanjutnya di sini.`,
+        timestamp: new Date().toISOString(),
+        isSystem: true
+      });
+      
+      triggerToast("Proyek Kolaborasi resmi DI GAS! Chat Grup Seni berhasil dibuat! 🚀");
+      
+      if (startChat) {
+        startChat({ roomId: groupId });
+      } else {
+        setActiveTab('chat');
+      }
+    } catch (err) {
+      console.error("Gagal meluncurkan kolaborasi:", err);
+      triggerToast("Gagal memulai proyek kolaborasi.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const userArtworks = currentUser
     ? artworks.filter((art) => art.artistId === currentUser.uid)
@@ -325,6 +425,16 @@ export default function ProfileSection({
             >
               <Settings className="w-3.5 h-3.5" /> Edit Profil
             </button>
+            <button
+              onClick={() => setViewMode('dashboard')}
+              className={`px-4 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                viewMode === 'dashboard'
+                  ? 'bg-brand-gold text-brand-charcoal shadow-md scale-105'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              <Award className="w-3.5 h-3.5" /> Dasbor Kreator
+            </button>
           </div>
 
           <button
@@ -368,6 +478,267 @@ export default function ProfileSection({
         </div>
       </div>
 
+      {viewMode === 'dashboard' ? (
+        <div className="space-y-8 animate-fadeIn text-left">
+          {/* Header banner describing dashboard */}
+          <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 border border-brand-gold/15 p-6 rounded-3xl relative overflow-hidden flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-brand-gold/[0.03] rounded-full filter blur-3xl p-0" />
+            <div className="space-y-1 relative">
+              <h3 className="font-serif text-2xl font-black text-white flex items-center gap-2">
+                <Award className="w-6 h-6 text-brand-gold animate-bounce" /> Hub Dasbor Kreator
+              </h3>
+              <p className="text-xs text-gray-400 max-w-lg leading-relaxed">
+                Kelola portofolio karya seni, analisis engagement publik, pantau status pendaftaran workshop, serta koordinasikan rekrutmen kolaborasi aktif Anda di sini.
+              </p>
+            </div>
+            <button 
+              onClick={() => setViewMode('public')}
+              className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white rounded-xl text-xs font-semibold border border-white/10 transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 self-start md:self-auto"
+            >
+              <ArrowLeft className="w-4 h-4 text-brand-gold" /> Kembali ke Profil
+            </button>
+          </div>
+
+          {/* Section Grid: Artworks list on Left (or top) & Forum Posts on Right */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            
+            {/* COLUMN 1: MANAGE PORTFOLIO ARTWORKS */}
+            <div className="bg-slate-900/40 border border-white/5 p-6 rounded-3xl space-y-4">
+              <div className="flex justify-between items-center border-b border-white/5 pb-3">
+                <h4 className="font-serif text-lg font-bold text-white flex items-center gap-2">
+                  <Palette className="w-5 h-5 text-brand-gold" /> Karya yang Diunggah ({userArtworks.length})
+                </h4>
+                <button
+                  onClick={() => {
+                    setViewMode('public');
+                    setShowArtworkForm(true);
+                  }}
+                  className="px-2.5 py-1.5 bg-brand-gold/10 hover:bg-brand-gold/20 text-brand-gold border border-brand-gold/20 rounded-xl text-[10px] uppercase font-mono font-bold flex items-center gap-1 transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Unggah Baru
+                </button>
+              </div>
+
+              <div className="space-y-3 max-h-[460px] overflow-y-auto pr-1">
+                {userArtworks.length > 0 ? (
+                  userArtworks.map((art) => {
+                    const artRating = art.ratings && art.ratings.length > 0
+                      ? (art.ratings.reduce((sum, r) => sum + r.score, 0) / art.ratings.length).toFixed(1)
+                      : null;
+
+                    return (
+                      <div 
+                        key={art.id} 
+                        className="p-3 bg-slate-950/80 border border-white/5 rounded-2xl flex items-center justify-between gap-4 transition-all hover:border-brand-gold/10"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <img 
+                            src={art.imageUrl} 
+                            alt={art.title} 
+                            className="w-12 h-12 rounded-xl object-cover border border-white/5 shrink-0 bg-slate-900"
+                          />
+                          <div className="min-w-0 space-y-0.5 text-left">
+                            <h5 className="text-xs font-extrabold text-white truncate">{art.title}</h5>
+                            <div className="flex items-center gap-2 text-[10px] text-gray-500 font-mono">
+                              <span className="uppercase text-brand-gold font-bold">{art.type}</span>
+                              <span>•</span>
+                              <span>{art.price ? `Rp ${art.price.toLocaleString('id-ID')}` : 'Pameran'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0 font-mono text-[10px]">
+                          <div className="text-right text-gray-400 space-y-0.5">
+                            <div className="flex items-center gap-1 justify-end">
+                              <Eye className="w-3 h-3 text-gray-500" /> {art.views || 0}
+                            </div>
+                            <div className="flex items-center gap-1 justify-end">
+                              <Heart className="w-3 h-3 text-rose-500" /> {art.likes || 0}
+                            </div>
+                          </div>
+                          
+                          {artRating && (
+                            <span className="px-2 py-0.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded font-bold">
+                              ★ {artRating}
+                            </span>
+                          )}
+
+                          <button
+                            onClick={async () => {
+                              const confirm = await showConfirmDialog("Sertifikasi Hapus Karya", `Apakah Anda yakin ingin menghapus karya seni "${art.title}" secara permanen dari galeri dan database?`, 'Ya, Hapus', 'Batal');
+                              if (confirm.isConfirmed) {
+                                try {
+                                  setLoading(true);
+                                  await deleteDoc(doc(db, 'artworks', art.id));
+                                  triggerToast("Karya seni berhasil dihapus.");
+                                } catch (err) {
+                                  showErrorToast("Gagal menghapus karya.", "Koneksi database terganggu.");
+                                } finally {
+                                  setLoading(false);
+                                }
+                              }
+                            }}
+                            className="p-2 bg-rose-500/10 hover:bg-rose-500 text-rose-450 hover:text-white rounded-xl transition cursor-pointer"
+                            title="Hapus Karya"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-12 border border-dashed border-white/5 rounded-2xl">
+                    <Plus className="w-6 h-6 mx-auto text-gray-600 mb-1" />
+                    <p className="text-xs text-gray-400 font-bold">Belum Ada Karya Terunggah</p>
+                    <p className="text-[10px] text-gray-500 leading-relaxed px-4">Unggah lukisan, musik, digital craft Anda untuk dipasarkan ke penikmat seni.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* COLUMN 2: MANAGE FORUM POSTS, WORKSHOPS & COLLABORATIVE GAS */}
+            <div className="bg-slate-900/40 border border-white/5 p-6 rounded-3xl space-y-4">
+              <h4 className="font-serif text-lg font-bold text-white flex items-center gap-2 border-b border-white/5 pb-3">
+                <Users className="w-5 h-5 text-brand-gold animate-pulse" /> Postingan Forum Komunitas ({myPosts.length})
+              </h4>
+
+              <div className="space-y-4 max-h-[460px] overflow-y-auto pr-1">
+                {myPosts.length > 0 ? (
+                  myPosts.map((post) => {
+                    const isCollab = post.group === 'Kolaborasi';
+                    const isWorkshop = post.group === 'Workshop';
+                    const rolesList = post.rolesNeeded || [];
+                    const claimedCount = Object.keys(post.collaborativeMembers || {}).length;
+                    const isRunning = post.status === 'running';
+
+                    return (
+                      <div 
+                        key={post.id} 
+                        className="p-4 bg-slate-950/80 border border-white/5 rounded-2xl space-y-3 transition-all hover:border-brand-gold/10"
+                      >
+                        <div className="flex justify-between items-start gap-2">
+                          <div className="space-y-1 text-left min-w-0">
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className={`text-[9px] font-mono font-bold px-2 py-0.5 rounded-full border ${isCollab ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25' : isWorkshop ? 'bg-violet-500/10 text-violet-400 border-violet-500/25' : 'bg-sky-505/10 text-sky-400 border-sky-500/25'}`}>
+                                {post.group}
+                              </span>
+                              {isRunning && (
+                                <span className="text-[9px] font-mono font-bold px-2 py-0.5 rounded-full border bg-orange-500/10 text-brand-gold border-brand-gold/20 animate-pulse flex items-center gap-1">
+                                  🚀 AKTIF BERJALAN
+                                </span>
+                              )}
+                            </div>
+                            <h5 className="text-xs font-extrabold text-white truncate leading-snug">{post.title}</h5>
+                          </div>
+                          
+                          <button
+                            onClick={async () => {
+                              const confirm = await showConfirmDialog("Hapus Postingan Forum", "Hapus postingan diskusi ini secara permanen?", "Ya, Hapus", "Batal");
+                              if (confirm.isConfirmed) {
+                                try {
+                                  setLoading(true);
+                                  await deleteDoc(doc(db, 'posts', post.id));
+                                  triggerToast("Postingan forum berhasil dihapus.");
+                                } catch (err) {
+                                  showErrorToast("Gagal menghapus postingan.", "Koneksi database terganggu.");
+                                } finally {
+                                  setLoading(false);
+                                }
+                              }
+                            }}
+                            className="p-1.5 bg-white/5 hover:bg-rose-500 text-gray-400 hover:text-white rounded-lg transition shrink-0"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* If Collaboration: Role status and GAS button */}
+                        {isCollab && (
+                          <div className="space-y-3 border-t border-white/5 pt-3">
+                            <div className="flex justify-between items-center text-[10px] font-mono">
+                              <span className="text-gray-400">Perekrutan Peran: <strong className="text-white">{claimedCount} / {rolesList.length}</strong> Terisi</span>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-1.5 text-[11px] text-left">
+                              {rolesList.map((role: string) => {
+                                const claimerName = post.collaborativeMembers?.[role];
+                                const claimerUid = post.collaborativeMemberUids?.[role];
+
+                                return (
+                                  <div key={role} className="p-1.5 bg-slate-900 border border-white/5 rounded-lg flex items-center justify-between gap-1.5">
+                                    <div className="min-w-0">
+                                      <span className="text-[9px] text-gray-500 uppercase block leading-none">{role}</span>
+                                      <span className={claimerName ? "text-emerald-400 font-bold truncate block" : "text-gray-600 truncate block"}>
+                                        {claimerName || 'Belum Terisi'}
+                                      </span>
+                                    </div>
+                                    {claimerName && claimerUid && startChat && (
+                                      <button
+                                        onClick={() => startChat({ userId: claimerUid, userName: claimerName })}
+                                        className="p-1 bg-brand-gold/10 hover:bg-brand-gold text-brand-gold hover:text-brand-charcoal rounded transition"
+                                        title={`Kirim Pesan ke ${claimerName}`}
+                                      >
+                                        <MessageSquare className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            {/* Launch now section ("apakah bisa di gas langsung") */}
+                            {!isRunning ? (
+                              <button
+                                disabled={claimedCount === 0 || loading}
+                                onClick={() => handleLaunchCollaboration(post)}
+                                className="w-full py-2 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all disabled:opacity-40 disabled:hover:scale-100 flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/15 cursor-pointer"
+                              >
+                                🚀 GAS SEKARANG! (Mulai Proyek)
+                              </button>
+                            ) : (
+                              <div className="p-2.5 bg-slate-900 border border-brand-gold/10 rounded-xl flex items-center justify-between text-xs animate-fadeIn">
+                                <span className="text-gray-400 text-[10px]">Chat Proyek Kolaborasi Aktif Berjalan</span>
+                                <button
+                                  onClick={() => startChat ? startChat({ roomId: `group_${post.id}` }) : setActiveTab('chat')}
+                                  className="px-2.5 py-1 bg-brand-gold hover:bg-white text-brand-charcoal font-bold text-[10px] rounded-lg transition-colors flex items-center gap-1"
+                                >
+                                  Masuk Chat <ExternalLink className="w-2.5 h-2.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* If Workshop: quota and registration list */}
+                        {isWorkshop && (
+                          <div className="text-[11px] font-mono text-left border-t border-white/5 pt-3 space-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-gray-400">Total Terregistrasi:</span>
+                              <span className="font-bold text-violet-400">{(post.registeredParticipants || []).length} Orang</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-400">Kuota/Fee:</span>
+                              <span className="text-white">{post.workshopQuota || 'Unlimited'} @ {post.workshopFee || 'Gratis'}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center py-12 border border-dashed border-white/5 rounded-2xl">
+                    <MessageSquare className="w-6 h-6 mx-auto text-gray-650 mb-1" />
+                    <p className="text-xs text-gray-400 font-bold">Belum Ada Postingan Komunitas</p>
+                    <p className="text-[10px] text-gray-500 leading-relaxed px-4">Tulis gagasan kolaborasi, tanya diskusi rujukan, atau program edukasi workshop seni.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+          </div>
+        </div>
+      ) : (
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
         <div className="lg:col-span-7 space-y-6">
@@ -890,7 +1261,7 @@ export default function ProfileSection({
             </div>
           </div>
         </div>
-      </div>
+      </div>)}
     </div>
   );
 }
