@@ -1,23 +1,26 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { User, Scroll, Users, Info, LogIn, LogOut, X, Film } from 'lucide-react';
+import { User, Scroll, Users, Info, LogIn, LogOut, X, Film, Award, MessageCircle } from 'lucide-react';
 
 interface MenuSheetProps {
   isOpen: boolean;
   onClose: () => void;
   setActiveTab: (tab: string) => void;
   currentUser: any; // Firebase user
+  userRole?: 'user' | 'admin' | null;
   handleLogout: () => void;
   onOpenAuthModal?: () => void;
 }
 
-export default function MenuSheet({ isOpen, onClose, setActiveTab, currentUser, handleLogout, onOpenAuthModal }: MenuSheetProps) {
+export default function MenuSheet({ isOpen, onClose, setActiveTab, currentUser, userRole, handleLogout, onOpenAuthModal }: MenuSheetProps) {
   const menuItems = [
     { id: 'profile', label: 'Profil Saya', icon: User, requiresAuth: true },
+    { id: 'chat', label: 'Ruang Chat', icon: MessageCircle, requiresAuth: false },
     { id: 'manifesto', label: 'Manifesto Kami', icon: Scroll, requiresAuth: false },
     { id: 'talents', label: 'Direktori Bakat', icon: Users, requiresAuth: false },
     { id: 'velora', label: 'Velora Adiksi', icon: Film, requiresAuth: false },
     { id: 'about', label: 'Tentang Kami', icon: Info, requiresAuth: false },
+    ...(userRole === 'admin' ? [{ id: 'admin', label: 'Panel Admin', icon: Award, requiresAuth: true }] : []),
   ];
 
   const handleNavigation = (tab: string) => {
