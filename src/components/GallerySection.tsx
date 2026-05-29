@@ -44,6 +44,7 @@ interface GallerySectionProps {
   currentUser?: FirebaseUser | null;
   openAuthModal?: () => void;
   userRole?: 'user' | 'admin' | null;
+  startChat?: (target: { userId?: string | null; userName?: string | null; userAvatar?: string | null; roomId?: string | null }) => void;
 }
 
 type FilterType = 'all' | 'painting' | 'music' | 'photography' | 'craft';
@@ -55,7 +56,8 @@ export default function GallerySection({
   onExploreArtist, 
   currentUser, 
   openAuthModal,
-  userRole 
+  userRole,
+  startChat
 }: GallerySectionProps) {
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [selectedArtwork, setSelectedArtwork] = useState<GalleryItem | null>(null);
@@ -394,6 +396,18 @@ export default function GallerySection({
                 >
                   {selectedArtwork.artistName}
                 </button>
+                {startChat && selectedArtwork.artistId !== currentUser?.uid && (
+                  <button
+                    onClick={() => {
+                      startChat({ userId: selectedArtwork.artistId, userName: selectedArtwork.artistName });
+                      setSelectedArtwork(null);
+                    }}
+                    className="ml-2 px-2.5 py-1 bg-brand-gold/10 hover:bg-brand-gold text-brand-gold hover:text-brand-charcoal border border-brand-gold/20 rounded font-black text-[10px] uppercase tracking-wider transition flex items-center gap-1 cursor-pointer select-none"
+                    title="Tanya Seniman langsung"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" /> Tanya Seniman
+                  </button>
+                )}
               </div>
             </div>
 
