@@ -23,7 +23,8 @@ import {
   Users,
   CheckCircle,
   TrendingUp,
-  SlidersHorizontal
+  SlidersHorizontal,
+  MessageSquare
 } from 'lucide-react';
 import { Talent, GalleryItem } from '../types';
 import { db } from '../lib/firebase';
@@ -36,6 +37,7 @@ interface TalentSectionProps {
   setSelectedTalentId: (id: string | null) => void;
   setActiveTab: (tab: string) => void;
   onExploreArtDetail: (art: GalleryItem) => void;
+  startChat?: (target: { userId?: string | null; userName?: string | null; userAvatar?: string | null; roomId?: string | null }) => void;
 }
 
 export default function TalentSection({
@@ -44,7 +46,8 @@ export default function TalentSection({
   selectedTalentId,
   setSelectedTalentId,
   setActiveTab,
-  onExploreArtDetail
+  onExploreArtDetail,
+  startChat
 }: TalentSectionProps) {
   const [searchField, setSearchField] = useState('');
   const [selectedSubLocation, setSelectedSubLocation] = useState('all');
@@ -543,6 +546,14 @@ export default function TalentSection({
                           )}
                           {!talent.socialMedia.instagram && !talent.socialMedia.youtube && !talent.socialMedia.tiktok && (
                             <span className="text-gray-600 italic">Hanya komunikasi langsung (WhatsApp)</span>
+                          )}
+                          {startChat && (
+                            <button
+                              onClick={() => startChat({ userId: talent.id, userName: talent.name })}
+                              className="px-3 py-1.5 bg-brand-gold/10 hover:bg-brand-gold hover:text-brand-charcoal text-brand-gold border border-brand-gold/20 hover:border-transparent rounded-lg text-[10px] uppercase font-mono font-bold flex items-center gap-1 transition-all cursor-pointer ml-auto shrink-0 select-none"
+                            >
+                              <MessageSquare className="w-3.5 h-3.5" /> Pesan Privat (Live Chat)
+                            </button>
                           )}
                         </div>
 
