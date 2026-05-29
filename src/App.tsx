@@ -34,6 +34,7 @@ const BottomNavBar = ({ activeTab, setActiveTab, onMenuOpen }: any) => {
         { id: 'gallery', label: 'Galeri', icon: Palette },
         { id: 'shop', label: 'Toko', icon: Coffee },
         { id: 'community', label: 'Forum', icon: MessageSquare },
+        { id: 'chat', label: 'Chat', icon: MessageCircle },
         { id: 'menu', label: 'Menu', icon: Menu },
     ];
 
@@ -553,7 +554,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className={activeTab === 'velora' ? 'w-full flex-grow relative' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full relative'}>
+      <main className={['velora', 'chat'].includes(activeTab) ? 'w-full flex-grow relative text-slate-100' : 'max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-grow w-full relative'}>
         <AnimatePresence mode="popLayout" custom={slideDirection}>
           <motion.div
             key={activeTab}
