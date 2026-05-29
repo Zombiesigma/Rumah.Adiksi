@@ -49,6 +49,7 @@ interface CommunitySectionProps {
   userRole?: 'user' | 'admin' | null;
   openAuthModal?: () => void;
   artworks?: GalleryItem[];
+  startChat?: (target: { userId?: string | null; userName?: string | null; userAvatar?: string | null; roomId?: string | null }) => void;
 }
 
 const PRESET_ART_IMGS = [
@@ -71,7 +72,7 @@ const PRESET_AVATARS = [
   'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80',
 ];
 
-export default function CommunitySection({ posts, setPosts, currentUser, userRole, openAuthModal, artworks }: CommunitySectionProps) {
+export default function CommunitySection({ posts, setPosts, currentUser, userRole, openAuthModal, artworks, startChat }: CommunitySectionProps) {
   // Check if a creator is verified by having any works in the Gallery
   const hasWorksInGallery = (authorUid?: string, authorName?: string) => {
     if (!artworks || artworks.length === 0) return false;
@@ -667,7 +668,11 @@ export default function CommunitySection({ posts, setPosts, currentUser, userRol
       ...(post.collaborativeMembers || {}),
       [role]: currentUser.displayName || 'Kreator Adiksi'
     };
-    const updatedPost = { ...post, collaborativeMembers: updatedMembers };
+    const updatedMemberUids = {
+      ...((post as any).collaborativeMemberUids || {}),
+      [role]: currentUser.uid
+    };
+    const updatedPost = { ...post, collaborativeMembers: updatedMembers, collaborativeMemberUids: updatedMemberUids };
 
     try {
       await setDoc(doc(db, 'posts', postId), updatedPost, { merge: true });
@@ -694,7 +699,9 @@ export default function CommunitySection({ posts, setPosts, currentUser, userRol
 
     const updatedMembers = { ...(post.collaborativeMembers || {}) };
     delete updatedMembers[role];
-    const updatedPost = { ...post, collaborativeMembers: updatedMembers };
+    const updatedMemberUids = { ...((post as any).collaborativeMemberUids || {}) };
+    delete updatedMemberUids[role];
+    const updatedPost = { ...post, collaborativeMembers: updatedMembers, collaborativeMemberUids: updatedMemberUids };
 
     try {
       await setDoc(doc(db, 'posts', postId), updatedPost, { merge: true });
@@ -772,7 +779,11 @@ export default function CommunitySection({ posts, setPosts, currentUser, userRol
         ...(selectedPostDetail.collaborativeMembers || {}),
         [role]: currentUser.displayName || 'Kreator Adiksi'
       };
-      const updatedPost = { ...selectedPostDetail, collaborativeMembers: updatedMembers };
+      const updatedMemberUids = {
+        ...((selectedPostDetail as any).collaborativeMemberUids || {}),
+        [role]: currentUser.uid
+      };
+      const updatedPost = { ...selectedPostDetail, collaborativeMembers: updatedMembers, collaborativeMemberUids: updatedMemberUids };
       
       try {
         await setDoc(doc(db, 'posts', selectedPostDetail.id), updatedPost, { merge: true });
@@ -793,7 +804,9 @@ export default function CommunitySection({ posts, setPosts, currentUser, userRol
       if (!currentUser) return;
       const updatedMembers = { ...(selectedPostDetail.collaborativeMembers || {}) };
       delete updatedMembers[role];
-      const updatedPost = { ...selectedPostDetail, collaborativeMembers: updatedMembers };
+      const updatedMemberUids = { ...((selectedPostDetail as any).collaborativeMemberUids || {}) };
+      delete updatedMemberUids[role];
+      const updatedPost = { ...selectedPostDetail, collaborativeMembers: updatedMembers, collaborativeMemberUids: updatedMemberUids };
       
       try {
         await setDoc(doc(db, 'posts', selectedPostDetail.id), updatedPost, { merge: true });
@@ -973,7 +986,7 @@ export default function CommunitySection({ posts, setPosts, currentUser, userRol
                     referrerPolicy="no-referrer"
                     className="w-11 h-11 rounded-full object-cover border border-white/10 shadow-md"
                   />
-                  <div>
+                  <div className="flex-1 min-w-0">
                     <h4 className="text-sm font-bold text-white flex items-center gap-1.5 flex-wrap">
                       {selectedPostDetail.authorName}
                       <span className="px-1.5 py-0.5 bg-brand-gold/10 border border-brand-gold/25 text-[9px] text-brand-gold font-mono rounded font-normal leading-none uppercase">
@@ -987,6 +1000,17 @@ export default function CommunitySection({ posts, setPosts, currentUser, userRol
                     </h4>
                     <p className="text-[10px] text-gray-500 font-mono mt-0.5">Diterbitkan: {selectedPostDetail.timestamp}</p>
                   </div>
+                  {startChat && selectedPostDetail.authorUid && selectedPostDetail.authorUid !== currentUser?.uid && (
+                    <button
+                      onClick={() => {
+                        startChat({ userId: selectedPostDetail.authorUid, userName: selectedPostDetail.authorName });
+                        setSelectedPostDetail(null);
+                      }}
+                      className="px-3 py-1.5 bg-brand-gold/10 hover:bg-brand-gold hover:text-brand-charcoal text-brand-gold border border-brand-gold/25 hover:border-transparent rounded-xl text-[10px] font-bold font-mono uppercase flex items-center gap-1 transition-all cursor-pointer shrink-0 select-none"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5" /> Kirim Pesan
+                    </button>
+                  )}
                 </div>
               </div>
 
