@@ -328,7 +328,7 @@ export default function App() {
       switch(activeTab) {
           case 'beranda': return <HomeSection talents={talents} artworks={artworks} shopItems={shopItems} events={events} posts={posts} setActiveTab={setActiveTab} onSelectTalent={(t) => { setSelectedTalentId(t.id); setActiveTab('talents'); }} addToCart={(item) => handleAddToCart(item, 'shop')} />;
           case 'manifesto': return <ManifestoSection />;
-          case 'gallery': return <GallerySection artworks={artworks} setArtworks={setArtworks} addToCart={(art) => handleAddToCart(art, 'gallery')} onExploreArtist={(id) => { setSelectedTalentId(id); setActiveTab('talents'); }} currentUser={currentUser} openAuthModal={() => setAuthModalOpen(true)} />;
+          case 'gallery': return <GallerySection artworks={artworks} setArtworks={setArtworks} addToCart={(art) => handleAddToCart(art, 'gallery')} onExploreArtist={(id) => { setSelectedTalentId(id); setActiveTab('talents'); }} currentUser={currentUser} openAuthModal={() => setAuthModalOpen(true)} userRole={userRole} />;
           case 'talents': return <TalentSection talents={talents} artworks={artworks} selectedTalentId={selectedTalentId} setSelectedTalentId={setSelectedTalentId} setActiveTab={setActiveTab} onExploreArtDetail={() => setActiveTab('gallery')} />;
           case 'shop': return <ShopSection items={shopItems} addToCart={(item) => handleAddToCart(item, 'shop')} currentUser={currentUser} addNotification={addNotification} openAuthModal={() => setAuthModalOpen(true)} setActiveTab={setActiveTab} cartCount={cartCount} />;
           case 'community': return <CommunitySection posts={posts} setPosts={setPosts} currentUser={currentUser} userRole={userRole} openAuthModal={() => setAuthModalOpen(true)} artworks={artworks} />;
