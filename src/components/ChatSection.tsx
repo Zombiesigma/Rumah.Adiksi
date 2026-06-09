@@ -209,6 +209,8 @@ export default function ChatSection({
     (incomingCallingRoom?.activeCall?.status === 'connecting' && incomingCallingRoom.activeCall.callerId !== currentUser?.uid) ||
     (currentRoomDoc?.activeCall?.status === 'connecting' && currentRoomDoc.activeCall.callerId !== currentUser?.uid)
   );
+  const isCallLive = callDuration > 1 || hasRemoteCallStream || callStatusMessage === 'TERHUBUNG' || callStatusMessage === 'TERHUBUNG (SIAP BICARA)';
+  const callThemeLabel = callMode === 'video' ? 'VIDEO CALL' : 'VOICE CALL';
   
   // Controls inside simulation
   const [simIsMuted, setSimIsMuted] = useState<boolean>(false);
@@ -219,6 +221,7 @@ export default function ChatSection({
   const ringIntervalRef = useRef<any>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const [localMediaStream, setLocalMediaStream] = useState<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
@@ -646,6 +649,9 @@ export default function ChatSection({
     if (remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = null;
     }
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = null;
+    }
     if (localVideoRef.current) {
       localVideoRef.current.srcObject = null;
     }
@@ -656,14 +662,18 @@ export default function ChatSection({
       return localStreamRef.current;
     }
 
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Browser ini belum mendukung akses mikrofon/kamera.');
+    }
+
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: true,
-      video: type === 'video'
+      video: type === 'video' ? { facingMode: 'user' } : false
     });
 
     localStreamRef.current = stream;
     setLocalMediaStream(stream);
-    if (localVideoRef.current) {
+    if (localVideoRef.current && type === 'video') {
       localVideoRef.current.srcObject = stream;
     }
     return stream;
@@ -671,11 +681,24 @@ export default function ChatSection({
 
   const attachInternalCallHandlers = async (pc: RTCPeerConnection, signalRef: any, type: 'audio' | 'video', role: 'caller' | 'callee') => {
     pc.ontrack = (event) => {
-      if (event.streams?.[0]) {
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = event.streams[0];
+      const incomingStream = event.streams?.[0] ?? new MediaStream([event.track]);
+      if (incomingStream) {
+        if (type === 'video' && remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = incomingStream;
+        }
+        if (remoteAudioRef.current) {
+          remoteAudioRef.current.srcObject = incomingStream;
         }
         setHasRemoteCallStream(true);
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'connected' || pc.connectionState === 'completed') {
+        setCallStatusMessage('TERHUBUNG');
+        setCallError(null);
+      } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        setCallError('Koneksi media terputus. Coba panggil lagi.');
       }
     };
 
@@ -741,7 +764,7 @@ export default function ChatSection({
       console.warn('Gagal menambahkan log telepon:', e);
     }
 
-    setCallStatusMessage('MEMANGGIL...');
+    setCallStatusMessage('MEMINTA IZIN MIKROFON/KAMERA...');
     setCallMode(type);
     setIsSimulatedCallActive(true);
     startDialTone();
@@ -752,6 +775,7 @@ export default function ChatSection({
         throw new Error('WebRTC tidak didukung di browser ini.');
       }
 
+      await ensureInternalMediaStream(type);
       const signalRef = doc(db, 'callSignals', callId);
       const pc = new RTCPeerConnection({
         iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }]
@@ -759,6 +783,7 @@ export default function ChatSection({
       await attachInternalCallHandlers(pc, signalRef, type, 'caller');
       didCreateInternalOfferRef.current = true;
 
+      setCallStatusMessage('MEMANGGIL...');
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       await setDoc(signalRef, {
@@ -825,7 +850,7 @@ export default function ChatSection({
     }
 
     setCallMode(type);
-    setCallStatusMessage('MENGHUBUNGKAN...');
+    setCallStatusMessage('MEMINTA IZIN MIKROFON/KAMERA...');
     setIsSimulatedCallActive(true);
     startDialTone();
     setCallError(null);
@@ -852,6 +877,7 @@ export default function ChatSection({
         throw new Error('WebRTC tidak didukung di browser ini.');
       }
 
+      await ensureInternalMediaStream(type);
       const signalRef = doc(db, 'callSignals', id);
       const pc = new RTCPeerConnection({
         iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }]
@@ -864,6 +890,7 @@ export default function ChatSection({
 
         if (data.offer && !didCreateInternalOfferRef.current && pc.signalingState !== 'closed' && !pc.remoteDescription) {
           didCreateInternalOfferRef.current = true;
+          setCallStatusMessage('MENGHUBUNGKAN...');
           await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
@@ -2016,42 +2043,44 @@ export default function ChatSection({
                   {/* Clean placeholder alignment */}
                   <div className="hidden" />
 
-                {/* ACTIVE CALL VIEWPORT OVERLAY (HYBRID: STANDARD STEAM + FAIL-SAFE SIMULATOR with WhatsApp theme) */}
+                {/* FULLSCREEN CALL PAGE */}
                 {callMode && (
-                  <div 
-                    className="fixed inset-x-3 bottom-4 top-4 md:absolute md:inset-auto md:right-6 md:bottom-6 md:w-[380px] md:h-[530px] bg-[#0b141a]/95 backdrop-blur-md z-[75] flex flex-col justify-between overflow-hidden animate-fadeIn text-white rounded-3xl border border-white/10 shadow-2xl ring-1 ring-black/40"
+                  <motion.div
+                    initial={{ opacity: 0, y: 18, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ duration: 0.2, ease: 'easeOut' }}
+                    className="fixed inset-0 z-[110] h-screen w-screen overflow-hidden bg-[#04090c]/95 text-white shadow-[0_25px_80px_rgba(0,0,0,0.45)] backdrop-blur-xl"
                     style={{
                       paddingTop: 'calc(env(safe-area-inset-top, 0.5rem) + 1rem)',
-                      paddingBottom: 'calc(env(safe-area-inset-bottom, 0.5rem) + 1rem)',
-                      paddingLeft: '1.25rem',
-                      paddingRight: '1.25rem'
+                      paddingBottom: 'calc(env(safe-area-inset-bottom, 0.5rem) + 1rem)'
                     }}
                   >
+                    <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(245,158,11,0.14),_transparent_38%)]" />
+                    <div className="relative flex h-full flex-col justify-between px-4 py-4 sm:px-6 sm:py-6">
                     {/* Elegant WhatsApp-like Top Encryption Bar */}
-                    <div className="flex items-center justify-between border-b border-white/5 pb-3">
-                      <div className="flex items-center gap-1.5 text-[9px] text-emerald-400 uppercase tracking-widest font-sans font-extrabold select-none">
-                        <Shield className="w-3.5 h-3.5 text-emerald-500" />
-                        <span>WhatsApp Call • E2EE</span>
+                    <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                      <div className="flex items-center gap-2 text-[9px] uppercase tracking-[0.28em] font-sans font-black text-emerald-300">
+                        <Shield className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Rumah Adiksi • Call</span>
                       </div>
-                      
-                      {/* Dynamic status badge / Timer */}
+
                       <div className="flex items-center gap-1.5">
                         {typeof window !== 'undefined' && window.self !== window.top && (
-                          <span className="text-[7.5px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                          <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-1.75 py-0.5 text-[7.5px] font-bold uppercase tracking-[0.24em] text-emerald-400">
                             Sandbox
                           </span>
                         )}
-                        <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 tracking-wider">
+                        <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-mono font-semibold text-emerald-300">
                           {Math.floor(callDuration / 60)}:{(callDuration % 60) < 10 ? '0' : ''}{callDuration % 60}
                         </span>
                       </div>
                     </div>
 
                     {/* Active call body viewport (Audio vs Video) */}
-                    <div className="flex-1 flex flex-col items-center justify-center relative py-3">
+                    <div className="relative flex-1 py-3">
                       {callMode === 'video' ? (
                         /* VIDEO CALL VIEWPORT */
-                        <div className="w-full h-full max-h-[380px] rounded-2xl overflow-hidden bg-black border border-white/10 shadow-2xl relative flex items-center justify-center group select-none">
+                        <div className="relative mx-auto flex h-full max-h-[calc(100vh-220px)] w-full max-w-5xl items-center justify-center overflow-hidden rounded-[32px] border border-white/10 bg-black shadow-2xl select-none">
                           
                           {/* REMOTE STREAM OR SIMULATION VIEW */}
                           {hasRemoteCallStream ? (
@@ -2100,24 +2129,27 @@ export default function ChatSection({
                           </div>
 
                           {/* Float Name/Status banner at bottom of video card */}
-                          <div className="absolute bottom-3 left-3 text-left pointer-events-none drop-shadow-md">
-                            <p className="text-xs font-bold font-sans text-white flex items-center gap-1">
-                              {getRecipientInfo(selectedRoom).title}
-                              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
-                            </p>
-                            <p className="text-[9px] text-gray-300 font-sans tracking-wide">
-                              {callStatusMessage}
-                            </p>
-                            {callError && (
-                              <p className="text-[9px] text-rose-300 font-sans tracking-wide mt-1">
-                                {callError}
-                              </p>
-                            )}
+                          <div className="absolute bottom-3 left-3 right-3 rounded-[18px] border border-white/10 bg-black/25 px-3 py-3 backdrop-blur-md">
+                            <div className="flex items-center justify-between gap-3">
+                              <div>
+                                <p className="flex items-center gap-1 text-sm font-black text-white">
+                                  {getRecipientInfo(selectedRoom).title}
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                </p>
+                                <p className="text-[10px] text-slate-300">{callStatusMessage}</p>
+                                {callError && (
+                                  <p className="mt-1 text-[9px] text-rose-300">{callError}</p>
+                                )}
+                              </div>
+                              <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.25em] text-emerald-300">
+                                {callMode === 'video' ? 'VIDEO' : 'VOICE'}
+                              </span>
+                            </div>
                           </div>
                         </div>
                       ) : (
                         /* AUDIO CALL VIEWPORT */
-                        <div className="text-center space-y-4 select-none">
+                        <div className="mx-auto flex h-full w-full max-w-3xl flex-col items-center justify-center rounded-[32px] border border-white/10 bg-gradient-to-b from-emerald-500/10 to-black/20 px-4 py-6 text-center shadow-inner select-none">
                           <div className="relative mx-auto w-24 h-24">
                             {/* Double glowing waves */}
                             <div className="absolute inset-0 rounded-full bg-emerald-500/20 animate-ping border border-emerald-500/40 [animation-duration:2.5s]" />
@@ -2142,7 +2174,7 @@ export default function ChatSection({
                             )}
                           </div>
 
-                          {/* Moving voice equalizer bar */}
+                          <div className="mt-5 flex items-end justify-center gap-1.5">
                           {!simIsMuted ? (
                             <div className="flex justify-center gap-0.5 h-6 items-end py-1">
                               {[1, 2, 3, 4, 3, 2, 4, 1, 3, 2, 4, 2].map((val, idx) => (
@@ -2161,6 +2193,11 @@ export default function ChatSection({
                               <MicOff className="w-2.5 h-2.5" /> Mikrofon dibisukan
                             </p>
                           )}
+                          </div>
+
+                          <div className="mt-5 rounded-full border border-white/10 bg-black/20 px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.28em] text-slate-300">
+                            {isCallLive ? 'Koneksi aktif' : 'Mempersiapkan sambungan'}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -2185,7 +2222,7 @@ export default function ChatSection({
                           </button>
                         </div>
                       ) : (
-                        <div className="bg-[#233138]/95 border border-white/10 ring-1 ring-black/50 backdrop-blur rounded-full px-5 py-2.5 flex items-center gap-4 shadow-2xl">
+                        <div className="flex items-center gap-3 rounded-full border border-white/10 bg-[#233138]/95 px-5 py-2.5 shadow-2xl ring-1 ring-black/50 backdrop-blur">
                           {/* Camera Toggle Button */}
                           <button
                             type="button"
@@ -2228,7 +2265,7 @@ export default function ChatSection({
                           <button
                             type="button"
                             onClick={handleHangupCall}
-                            className="w-12 h-12 bg-red-650 hover:bg-red-550 text-white rounded-full flex items-center justify-center transition cursor-pointer select-none shadow-lg shadow-red-650/40 active:scale-95 duration-200"
+                            className="flex h-12 w-12 items-center justify-center rounded-full bg-red-600 text-white shadow-lg shadow-red-600/40 transition duration-200 hover:bg-red-500 active:scale-95"
                             title="Akhiri Panggilan"
                           >
                             <Phone className="w-5 h-5 rotate-[135deg]" />
@@ -2236,8 +2273,10 @@ export default function ChatSection({
                         </div>
                       )}
                     </div>
-                  </div>
+                    </div>
+                  </motion.div>
                 )}
+                <audio ref={remoteAudioRef} autoPlay playsInline className="hidden" />
               </>
             ) : (
               // Empty selection screen
