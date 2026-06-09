@@ -202,6 +202,13 @@ export default function ChatSection({
   const [callHistoryList, setCallHistoryList] = useState<any[]>([]);
   const [callDuration, setCallDuration] = useState<number>(0);
   const [callStatusMessage, setCallStatusMessage] = useState<string>("MENGHUBUNGKAN...");
+  const [callError, setCallError] = useState<string | null>(null);
+  const [hasRemoteCallStream, setHasRemoteCallStream] = useState<boolean>(false);
+
+  const incomingCallPending = Boolean(
+    (incomingCallingRoom?.activeCall?.status === 'connecting' && incomingCallingRoom.activeCall.callerId !== currentUser?.uid) ||
+    (currentRoomDoc?.activeCall?.status === 'connecting' && currentRoomDoc.activeCall.callerId !== currentUser?.uid)
+  );
   
   // Controls inside simulation
   const [simIsMuted, setSimIsMuted] = useState<boolean>(false);
@@ -211,7 +218,15 @@ export default function ChatSection({
   const audioCtxRef = useRef<AudioContext | null>(null);
   const ringIntervalRef = useRef<any>(null);
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const [localMediaStream, setLocalMediaStream] = useState<MediaStream | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const signalDocRef = useRef<any>(null);
+  const signalUnsubscribeRef = useRef<(() => void) | null>(null);
+  const callRoleRef = useRef<'caller' | 'callee' | null>(null);
+  const pendingRemoteCandidatesRef = useRef<any[]>([]);
+  const didCreateInternalOfferRef = useRef(false);
 
   const stopRingtone = () => {
     if (ringIntervalRef.current) {
@@ -401,9 +416,11 @@ export default function ChatSection({
 
     // Prioritize ringing active incoming calls from any chat room first (enables global popups)
     if (incomingCallingRoom?.activeCall) {
-      setIsSimulatedCallActive(false);
-      setCallMode(null);
+      setIsSimulatedCallActive(true);
+      setCallMode(incomingCallingRoom.activeCall.type || 'audio');
       setCallStatusMessage("PANGGILAN MASUK...");
+      setSelectedRoom(incomingCallingRoom);
+      setIsMobilePaneOpen(true);
       startRingTone();
       return;
     }
@@ -443,40 +460,11 @@ export default function ChatSection({
     };
   }, [incomingCallingRoom?.activeCall, currentRoomDoc?.activeCall, currentUser, activeCallInstance]);
 
-  // Local Webcam feed capture for simulated/real video calls PIP WhatsApp layout
-  useEffect(() => {
-    let activeStream: MediaStream | null = null;
-    if (callMode === 'video' && !simIsCamOff) {
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        .then(stream => {
-          activeStream = stream;
-          setLocalMediaStream(stream);
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = stream;
-          }
-        })
-        .catch(err => {
-          console.warn("Kamera tidak diizinkan atau tidak didukung di iframe:", err);
-        });
-    } else {
-      if (localMediaStream) {
-        localMediaStream.getTracks().forEach(track => track.stop());
-        setLocalMediaStream(null);
-      }
-    }
-
-    return () => {
-      if (activeStream) {
-        activeStream.getTracks().forEach(track => track.stop());
-      }
-    };
-  }, [callMode, simIsCamOff]);
-
   useEffect(() => {
     if (localVideoRef.current && localMediaStream) {
       localVideoRef.current.srcObject = localMediaStream;
     }
-  }, [localMediaStream, localVideoRef.current]);
+  }, [localMediaStream]);
 
   // Presence heartbeat for the current user
   useEffect(() => {
@@ -619,17 +607,112 @@ export default function ChatSection({
     return () => clearInterval(timerInterval);
   }, [callMode, activeCallInstance, isSimulatedCallActive]);
 
-  // Call handshakes and actions
+  const cleanupInternalCall = async () => {
+    if (signalUnsubscribeRef.current) {
+      signalUnsubscribeRef.current();
+      signalUnsubscribeRef.current = null;
+    }
+
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
+    }
+
+    if (localMediaStream) {
+      localMediaStream.getTracks().forEach((track) => track.stop());
+      setLocalMediaStream(null);
+    }
+
+    if (signalDocRef.current) {
+      try {
+        await updateDoc(signalDocRef.current, { status: 'ended' });
+      } catch (e) {
+        console.warn('Gagal menandai sinyal panggilan selesai:', e);
+      }
+    }
+
+    signalDocRef.current = null;
+    callRoleRef.current = null;
+    didCreateInternalOfferRef.current = false;
+    pendingRemoteCandidatesRef.current = [];
+    setHasRemoteCallStream(false);
+    setCallError(null);
+
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+    }
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = null;
+    }
+  };
+
+  const ensureInternalMediaStream = async (type: 'audio' | 'video') => {
+    if (localStreamRef.current) {
+      return localStreamRef.current;
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: type === 'video'
+    });
+
+    localStreamRef.current = stream;
+    setLocalMediaStream(stream);
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = stream;
+    }
+    return stream;
+  };
+
+  const attachInternalCallHandlers = async (pc: RTCPeerConnection, signalRef: any, type: 'audio' | 'video', role: 'caller' | 'callee') => {
+    pc.ontrack = (event) => {
+      if (event.streams?.[0]) {
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = event.streams[0];
+        }
+        setHasRemoteCallStream(true);
+      }
+    };
+
+    pc.onicecandidate = async (event) => {
+      if (!event.candidate) return;
+      const candidatePayload = {
+        sender: role,
+        candidate: event.candidate.toJSON()
+      };
+      try {
+        await updateDoc(signalRef, {
+          [role === 'caller' ? 'callerCandidates' : 'calleeCandidates']: arrayUnion(candidatePayload)
+        });
+      } catch (e) {
+        console.warn('Gagal mengirim kandidat ICE internal:', e);
+      }
+    };
+
+    if (typeof window !== 'undefined' && window.RTCPeerConnection) {
+      const localStream = await ensureInternalMediaStream(type);
+      localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+      peerConnectionRef.current = pc;
+      callRoleRef.current = role;
+      signalDocRef.current = signalRef;
+    }
+  };
+
   const handleStartCall = async (type: 'audio' | 'video') => {
     if (!currentUser || !selectedRoom) {
-      alert("Hubungan obrolan belum aktif atau Anda belum masuk.");
+      alert('Hubungan obrolan belum aktif atau Anda belum masuk.');
       return;
     }
 
     const safeChannelId = selectedRoom.id.replace(/[^a-zA-Z0-9_-]/g, '').substring(0, 30);
     const callId = `call_${safeChannelId}_${Date.now()}`;
-    
-    // Set up activeCall in Firestore room document
+    const otherId = selectedRoom.participants.find((id) => id !== currentUser.uid) || 'target';
+
     const roomRef = doc(db, 'chats', selectedRoom.id);
     await updateDoc(roomRef, {
       activeCall: {
@@ -641,9 +724,7 @@ export default function ChatSection({
       }
     });
 
-    // Logging outgoing call in Call logs
     try {
-      const otherId = selectedRoom.participants.find(id => id !== currentUser.uid) || 'target';
       const otherName = getRecipientInfo(selectedRoom).title;
       await addDoc(collection(db, 'calls'), {
         id: callId,
@@ -657,66 +738,70 @@ export default function ChatSection({
         timestamp: new Date().toISOString()
       });
     } catch (e) {
-      console.warn("Gagal menambahkan log telepon:", e);
+      console.warn('Gagal menambahkan log telepon:', e);
     }
 
-    setCallStatusMessage("MEMANGGIL...");
+    setCallStatusMessage('MEMANGGIL...');
     setCallMode(type);
+    setIsSimulatedCallActive(true);
     startDialTone();
+    setCallError(null);
 
-    const isInsideIframe = typeof window !== 'undefined' && window.self !== window.top;
+    try {
+      if (!window.RTCPeerConnection) {
+        throw new Error('WebRTC tidak didukung di browser ini.');
+      }
 
-    let isStreamReady = false;
-    if (streamClient && !isInsideIframe) {
-      const wsState = streamClient.wsConnectionState;
-      const connId = streamClient.connectionId;
-      console.log(`Stream Video Client authentication check (StartCall): wsConnectionState=${wsState}, connectionId=${connId}`);
-      
-      if (wsState === 'connected' || connId) {
-        isStreamReady = true;
-      } else {
-        console.warn("Stream Video Client is not fully authenticated or connected yet. Attempting to ensure connection...");
-        try {
-          if (currentUser) {
-            const res = await fetch(`/api/stream/token?userId=${currentUser.uid}`);
-            if (res.ok) {
-              const { token } = await res.json();
-              await streamClient.connectUser({
-                id: currentUser.uid,
-                name: currentUser.displayName || 'Anggota Adiksi',
-                image: currentUser.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150'
-              }, token);
-              isStreamReady = true;
-              console.log("Stream Video Client successfully authenticated during StartCall check.");
+      const signalRef = doc(db, 'callSignals', callId);
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }]
+      });
+      await attachInternalCallHandlers(pc, signalRef, type, 'caller');
+      didCreateInternalOfferRef.current = true;
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await setDoc(signalRef, {
+        roomId: selectedRoom.id,
+        type,
+        callerId: currentUser.uid,
+        calleeId: otherId,
+        status: 'connecting',
+        offer: {
+          type: offer.type,
+          sdp: offer.sdp
+        },
+        callerCandidates: [],
+        calleeCandidates: []
+      }, { merge: true });
+
+      signalUnsubscribeRef.current = onSnapshot(signalRef, async (snapshot) => {
+        const data = snapshot.data() as any;
+        if (!data) return;
+
+        if (data.answer && pc.signalingState !== 'closed' && !pc.currentRemoteDescription) {
+          await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+          pendingRemoteCandidatesRef.current.forEach((candidate) => pc.addIceCandidate(candidate));
+          pendingRemoteCandidatesRef.current = [];
+          setCallStatusMessage('TERHUBUNG');
+          setCallError(null);
+        }
+
+        const remoteCandidates = (data.calleeCandidates || []).filter((item: any) => item.sender !== 'caller');
+        if (remoteCandidates.length > 0) {
+          remoteCandidates.forEach((item: any) => {
+            if (pc.remoteDescription) {
+              pc.addIceCandidate(new RTCIceCandidate(item.candidate)).catch(() => {});
+            } else {
+              pendingRemoteCandidatesRef.current.push(new RTCIceCandidate(item.candidate));
             }
-          }
-        } catch (authError) {
-          console.error("Failed to authenticate Stream client during StartCall verification:", authError);
+          });
         }
-      }
-    }
-
-    if (streamClient && !isInsideIframe && isStreamReady) {
-      // Create the call instance using Stream SDK
-      try {
-        const call = streamClient.call('default', callId);
-        await call.join({ create: true });
-        if (type === 'audio') {
-          await call.camera.disable().catch(() => {});
-        } else {
-          await call.camera.enable().catch(() => {});
-        }
-        await call.microphone.enable().catch(() => {});
-        
-        setActiveCallInstance(call);
-      } catch (err: any) {
-        console.warn("Gagal mengaktifkan piranti fisik (Mic/Cam), beralih ke panggilan analog tersinkronisasi:", err);
-        // Seamless fallback to fully collaborative, Firestore-synced Simulated call
-        setIsSimulatedCallActive(true);
-      }
-    } else {
-      // Fallback directly or iframe safe simulation
-      setIsSimulatedCallActive(true);
+      });
+    } catch (err: any) {
+      console.warn('Gagal memulai panggilan internal:', err);
+      setCallError('Browser tidak mengizinkan kamera/mikrofon atau WebRTC tidak tersedia.');
+      setCallStatusMessage('TERHUBUNG (SIAP BICARA)');
     }
   };
 
@@ -734,26 +819,24 @@ export default function ChatSection({
     if (!activeCallInfo) return;
     const { id, type } = activeCallInfo;
 
-    // Direct the receiver to the caller's chat room seamlessly
     if (targetRoom.id !== selectedRoom?.id) {
       setSelectedRoom(targetRoom);
       setIsMobilePaneOpen(true);
     }
 
     setCallMode(type);
+    setCallStatusMessage('MENGHUBUNGKAN...');
+    setIsSimulatedCallActive(true);
+    startDialTone();
+    setCallError(null);
 
-    // Update call status to active in room document
     const roomRef = doc(db, 'chats', targetRoom.id);
     await updateDoc(roomRef, {
       'activeCall.status': 'active'
     });
 
-    // Try to update log in calls collection to 'answered'
     try {
-      const q = query(
-        collection(db, 'calls'),
-        where('id', '==', id)
-      );
+      const q = query(collection(db, 'calls'), where('id', '==', id));
       const s = await getDocs(q);
       if (!s.empty) {
         await updateDoc(doc(db, 'calls', s.docs[0].id), {
@@ -761,63 +844,56 @@ export default function ChatSection({
         });
       }
     } catch (e) {
-      console.warn("Gagal update status log ke terjawab:", e);
+      console.warn('Gagal update status log ke terjawab:', e);
     }
 
-    // Try standard stream accept
-    const isInsideIframe = typeof window !== 'undefined' && window.self !== window.top;
-    
-    let isStreamReady = false;
-    if (streamClient && !isInsideIframe) {
-      const wsState = streamClient.wsConnectionState;
-      const connId = streamClient.connectionId;
-      console.log(`Stream Video Client authentication check (AcceptCall): wsConnectionState=${wsState}, connectionId=${connId}`);
-      
-      if (wsState === 'connected' || connId) {
-        isStreamReady = true;
-      } else {
-        console.warn("Stream Video Client is not fully authenticated or connected yet. Attempting to ensure connection (AcceptCall)...");
-        try {
-          if (currentUser) {
-            const res = await fetch(`/api/stream/token?userId=${currentUser.uid}`);
-            if (res.ok) {
-              const { token } = await res.json();
-              await streamClient.connectUser({
-                id: currentUser.uid,
-                name: currentUser.displayName || 'Anggota Adiksi',
-                image: currentUser.photoURL || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150'
-              }, token);
-              isStreamReady = true;
-              console.log("Stream Video Client successfully authenticated during AcceptCall check.");
+    try {
+      if (!window.RTCPeerConnection) {
+        throw new Error('WebRTC tidak didukung di browser ini.');
+      }
+
+      const signalRef = doc(db, 'callSignals', id);
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }]
+      });
+      await attachInternalCallHandlers(pc, signalRef, type, 'callee');
+
+      signalUnsubscribeRef.current = onSnapshot(signalRef, async (snapshot) => {
+        const data = snapshot.data() as any;
+        if (!data) return;
+
+        if (data.offer && !didCreateInternalOfferRef.current && pc.signalingState !== 'closed' && !pc.remoteDescription) {
+          didCreateInternalOfferRef.current = true;
+          await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          await updateDoc(signalRef, {
+            answer: {
+              type: answer.type,
+              sdp: answer.sdp
+            },
+            status: 'active'
+          });
+          setCallStatusMessage('TERHUBUNG');
+          setCallError(null);
+        }
+
+        const remoteCandidates = (data.callerCandidates || []).filter((item: any) => item.sender !== 'callee');
+        if (remoteCandidates.length > 0) {
+          remoteCandidates.forEach((item: any) => {
+            if (pc.remoteDescription) {
+              pc.addIceCandidate(new RTCIceCandidate(item.candidate)).catch(() => {});
+            } else {
+              pendingRemoteCandidatesRef.current.push(new RTCIceCandidate(item.candidate));
             }
-          }
-        } catch (authError) {
-          console.error("Failed to authenticate Stream client during AcceptCall verification:", authError);
+          });
         }
-      }
+      });
+    } catch (err: any) {
+      console.warn('Gagal menerima panggilan internal:', err);
+      setCallError('Browser tidak mengizinkan kamera/mikrofon atau WebRTC tidak tersedia.');
+      setCallStatusMessage('TERHUBUNG (SIAP BICARA)');
     }
-
-    if (streamClient && !isInsideIframe && isStreamReady) {
-      try {
-        const call = streamClient.call('default', id);
-        await call.join();
-        if (type === 'audio') {
-          await call.camera.disable().catch(() => {});
-        } else {
-          await call.camera.enable().catch(() => {});
-        }
-        await call.microphone.enable().catch(() => {});
-
-        setActiveCallInstance(call);
-        return;
-      } catch (err: any) {
-        console.warn("Gagal inisialisasi piranti fisik, masuk ke mode komunikasi tersinkronisasi:", err);
-      }
-    }
-
-    // Fallback: active simulated call
-    setIsSimulatedCallActive(true);
-    setCallStatusMessage("TERHUBUNG (SIAP BICARA)");
   };
 
   const handleDeclineCall = async (roomToUse?: ChatRoom) => {
@@ -856,8 +932,9 @@ export default function ChatSection({
   };
 
   const handleHangupCall = async () => {
-    // Save duration before layout tears down
     const finalDuration = callDuration;
+
+    await cleanupInternalCall();
 
     if (activeCallInstance) {
       try {
@@ -1977,26 +2054,16 @@ export default function ChatSection({
                         <div className="w-full h-full max-h-[380px] rounded-2xl overflow-hidden bg-black border border-white/10 shadow-2xl relative flex items-center justify-center group select-none">
                           
                           {/* REMOTE STREAM OR SIMULATION VIEW */}
-                          {activeCallInstance && streamClient ? (
-                            <StreamVideo client={streamClient}>
-                              <StreamCall call={activeCallInstance}>
-                                <div className="w-full h-full">
-                                  <SpeakerLayout 
-                                    VideoPlaceholder={() => (
-                                      <div className="absolute inset-0 bg-slate-900 flex flex-col items-center justify-center gap-3">
-                                        <img
-                                          src={getRecipientInfo(selectedRoom).avatar}
-                                          alt="Avatar placeholder"
-                                          className="w-16 h-16 rounded-full object-cover border-2 border-emerald-500"
-                                        />
-                                        <p className="text-[10px] text-gray-400">Kamera teman dimatikan</p>
-                                      </div>
-                                    )} 
-                                    PictureInPicturePlaceholder={() => null} 
-                                  />
-                                </div>
-                              </StreamCall>
-                            </StreamVideo>
+                          {hasRemoteCallStream ? (
+                            <div className="w-full h-full relative">
+                              <video
+                                ref={remoteVideoRef}
+                                autoPlay
+                                playsInline
+                                className="w-full h-full object-cover"
+                              />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20" />
+                            </div>
                           ) : (
                             /* SIMULATION / FAILSAFE: Remote participant image */
                             <div className="w-full h-full relative">
@@ -2041,6 +2108,11 @@ export default function ChatSection({
                             <p className="text-[9px] text-gray-300 font-sans tracking-wide">
                               {callStatusMessage}
                             </p>
+                            {callError && (
+                              <p className="text-[9px] text-rose-300 font-sans tracking-wide mt-1">
+                                {callError}
+                              </p>
+                            )}
                           </div>
                         </div>
                       ) : (
@@ -2063,6 +2135,11 @@ export default function ChatSection({
                               <span className="w-1 h-1 bg-emerald-400 rounded-full animate-pulse" />
                               {callStatusMessage}
                             </p>
+                            {callError && (
+                              <p className="text-[9px] text-rose-300 font-sans mt-1">
+                                {callError}
+                              </p>
+                            )}
                           </div>
 
                           {/* Moving voice equalizer bar */}
@@ -2090,55 +2167,74 @@ export default function ChatSection({
 
                     {/* Controls Docking Bar (WhatsApp Style Dark horizontal glass bar) */}
                     <div className="flex justify-center items-center pt-2 pb-1">
-                      <div className="bg-[#233138]/95 border border-white/10 ring-1 ring-black/50 backdrop-blur rounded-full px-5 py-2.5 flex items-center gap-4 shadow-2xl">
-                        {/* Camera Toggle Button */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (activeCallInstance) {
-                              activeCallInstance.camera.toggle();
-                            }
-                            setSimIsCamOff(prev => !prev);
-                          }}
-                          className={`w-10 h-10 rounded-full flex items-center justify-center transition cursor-pointer select-none active:scale-95 shadow ${
-                            simIsCamOff 
-                              ? 'bg-rose-600/30 text-rose-200 border border-rose-500/50 hover:bg-rose-600/40' 
-                              : 'bg-white/10 text-white border border-white/10 hover:bg-white/20'
-                          }`}
-                          title="Nyalakan/Matikan Kamera"
-                        >
-                          {simIsCamOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
-                        </button>
+                      {incomingCallPending ? (
+                        <div className="flex items-center gap-3">
+                          <button
+                            type="button"
+                            onClick={() => handleAcceptCall(incomingCallingRoom || selectedRoom || undefined)}
+                            className="px-5 py-2.5 rounded-full bg-emerald-500 hover:bg-emerald-400 text-white font-sans font-black text-[11px] shadow-lg shadow-emerald-500/25 transition cursor-pointer"
+                          >
+                            Terima
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeclineCall(incomingCallingRoom || selectedRoom || undefined)}
+                            className="px-5 py-2.5 rounded-full bg-rose-600 hover:bg-rose-500 text-white font-sans font-black text-[11px] shadow-lg shadow-rose-600/25 transition cursor-pointer"
+                          >
+                            Tolak
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="bg-[#233138]/95 border border-white/10 ring-1 ring-black/50 backdrop-blur rounded-full px-5 py-2.5 flex items-center gap-4 shadow-2xl">
+                          {/* Camera Toggle Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (activeCallInstance) {
+                                activeCallInstance.camera.toggle();
+                              }
+                              setSimIsCamOff(prev => !prev);
+                            }}
+                            className={`w-10 h-10 rounded-full flex items-center justify-center transition cursor-pointer select-none active:scale-95 shadow ${
+                              simIsCamOff 
+                                ? 'bg-rose-600/30 text-rose-200 border border-rose-500/50 hover:bg-rose-600/40' 
+                                : 'bg-white/10 text-white border border-white/10 hover:bg-white/20'
+                            }`}
+                            title="Nyalakan/Matikan Kamera"
+                          >
+                            {simIsCamOff ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
+                          </button>
 
-                        {/* Mic/Mute Toggle Button */}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (activeCallInstance) {
-                              activeCallInstance.microphone.toggle();
-                            }
-                            setSimIsMuted(prev => !prev);
-                          }}
-                          className={`w-10 h-10 rounded-full flex items-center justify-center transition cursor-pointer select-none active:scale-95 shadow ${
-                            simIsMuted 
-                              ? 'bg-rose-600/30 text-rose-200 border border-rose-500/50 hover:bg-rose-600/40' 
-                              : 'bg-white/10 text-white border border-white/10 hover:bg-white/20'
-                          }`}
-                          title="Nyalakan/Matikan Suara"
-                        >
-                          {simIsMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                        </button>
+                          {/* Mic/Mute Toggle Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (activeCallInstance) {
+                                activeCallInstance.microphone.toggle();
+                              }
+                              setSimIsMuted(prev => !prev);
+                            }}
+                            className={`w-10 h-10 rounded-full flex items-center justify-center transition cursor-pointer select-none active:scale-95 shadow ${
+                              simIsMuted 
+                                ? 'bg-rose-600/30 text-rose-200 border border-rose-500/50 hover:bg-rose-600/40' 
+                                : 'bg-white/10 text-white border border-white/10 hover:bg-white/20'
+                            }`}
+                            title="Nyalakan/Matikan Suara"
+                          >
+                            {simIsMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                          </button>
 
-                        {/* Classic solid crimson Red Hangup Button */}
-                        <button
-                          type="button"
-                          onClick={handleHangupCall}
-                          className="w-12 h-12 bg-red-650 hover:bg-red-550 text-white rounded-full flex items-center justify-center transition cursor-pointer select-none shadow-lg shadow-red-650/40 active:scale-95 duration-200"
-                          title="Akhiri Panggilan"
-                        >
-                          <Phone className="w-5 h-5 rotate-[135deg]" />
-                        </button>
-                      </div>
+                          {/* Classic solid crimson Red Hangup Button */}
+                          <button
+                            type="button"
+                            onClick={handleHangupCall}
+                            className="w-12 h-12 bg-red-650 hover:bg-red-550 text-white rounded-full flex items-center justify-center transition cursor-pointer select-none shadow-lg shadow-red-650/40 active:scale-95 duration-200"
+                            title="Akhiri Panggilan"
+                          >
+                            <Phone className="w-5 h-5 rotate-[135deg]" />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
