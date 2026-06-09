@@ -43,6 +43,30 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Chat & call signaling access for real-time voice/video conversations
+    match /chats/{chatId} {
+      allow read, list: if isSignedIn();
+      allow create, update: if isSignedIn();
+      match /typing/{typingId} {
+        allow read, list, create, update: if isSignedIn();
+      }
+    }
+
+    match /calls/{callId} {
+      allow read, list: if isSignedIn();
+      allow create, update: if isSignedIn();
+    }
+
+    match /callSignals/{callId} {
+      allow read, list: if isSignedIn();
+      allow create, update: if isSignedIn();
+    }
+
+    match /presence/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && request.auth.uid == userId;
+    }
+
     // CommunityPost validations
     function isValidPost(data) {
       return data.authorName is string && data.authorName.size() > 0 && data.authorName.size() <= 150
