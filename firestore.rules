@@ -1,0 +1,194 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global safety catching net: deny everything by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+    
+    // Primitives and global safety validators
+    function isValidId(id) { 
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); 
+    }
+    
+    function isSignedIn() { 
+      return request.auth != null; 
+    }
+    
+    function incoming() { 
+      return request.resource.data; 
+    }
+    
+    function existing() { 
+      return resource.data; 
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == "gunturfadilah140@gmail.com" ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin") ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "ADMIN")
+      );
+    }
+
+    // UserProfile specifications
+    match /users/{userId} {
+      allow get: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && request.auth.uid == userId && (incoming().role == "user" || request.auth.token.email == "gunturfadilah140@gmail.com");
+      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin()) && (incoming().role == existing().role || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // CommunityPost validations
+    function isValidPost(data) {
+      return data.authorName is string && data.authorName.size() > 0 && data.authorName.size() <= 150
+          && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+          && data.content is string && data.content.size() > 0 && data.content.size() <= 6000
+          && data.group in ['Diskusi', 'Kolaborasi', 'Workshop', 'Karya'];
+    }
+
+    match /posts/{postId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn() && isValidPost(incoming());
+      allow update: if isSignedIn() && (
+        // Any user can like, comment, claim a role, or register for a workshop
+        incoming().diff(existing()).affectedKeys().hasAny(['likes', 'comments', 'registeredParticipants', 'collaborativeMembers', 'artworkRatings']) ||
+        // Only author or admin can modify the entire body
+        (isValidPost(incoming()) && (incoming().authorName == existing().authorName || isAdmin()))
+      );
+      allow delete: if isSignedIn();
+    }
+
+    // ArtEvent validations
+    function isValidEvent(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() <= 200
+          && data.category in ['Pameran', 'Konser', 'Workshop', 'Bazaar'];
+    }
+
+    match /events/{eventId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if isAdmin();
+      allow update: if isSignedIn() && (
+        // Allow public to increment register count or registration list
+        incoming().diff(existing()).affectedKeys().hasAny(['registeredCount', 'isRegistered', 'registeredParticipants']) ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Artworks (Gallery) collection validations
+    function isValidArtwork(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() <= 200
+          && data.artistName is string && data.artistName.size() > 0
+          && data.type in ['painting', 'music', 'photography', 'craft', 'digital'];
+    }
+
+    match /artworks/{artId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn() && (incoming().artistId == request.auth.uid || isAdmin()) && isValidArtwork(incoming());
+      allow update: if isSignedIn() && (
+        // Any signed-in user can like, view or change status (like isSold during buy)
+        incoming().diff(existing()).affectedKeys().hasAny(['likes', 'views', 'isSold']) ||
+        existing().artistId == request.auth.uid ||
+        isAdmin()
+      );
+      allow delete: if isAdmin() || (isSignedIn() && existing().artistId == request.auth.uid);
+    }
+
+    // Talents collection validations
+    function isValidTalent(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 150
+          && data.field is string && data.field.size() > 0
+          && data.bio is string && data.bio.size() > 0;
+    }
+
+    match /talents/{talentId} {
+      allow get: if true;
+      allow list: if true;
+      allow create, update: if isSignedIn() && request.auth.uid == talentId && isValidTalent(incoming());
+      allow delete: if isAdmin() || (isSignedIn() && request.auth.uid == talentId);
+    }
+
+    // ShopItem collection validations
+    match /shopItems/{itemId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if isAdmin();
+      allow update: if isSignedIn() && (
+        // Stock can be decremented on purchase by general users
+        incoming().diff(existing()).affectedKeys().hasAny(['stock']) ||
+        isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Google Meet Rooms validations & rules
+    function isValidMeetRoom(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() <= 200
+          && data.uri is string && data.uri.size() > 0 && data.uri.size() <= 600
+          && data.hostName is string && data.hostName.size() > 0 && data.hostName.size() <= 150
+          && data.hostUid is string && data.hostUid.size() > 0 && data.hostUid.size() <= 128
+          && data.isActive is bool;
+    }
+
+    match /meet_rooms/{roomId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn() && (incoming().hostUid == request.auth.uid || isAdmin()) && isValidMeetRoom(incoming());
+      allow update: if isSignedIn() && (
+        (existing().hostUid == request.auth.uid || isAdmin()) && isValidMeetRoom(incoming())
+      );
+      allow delete: if isSignedIn() && (existing().hostUid == request.auth.uid || isAdmin());
+    }
+
+    // System wide broadcast alerts
+    match /system_alerts/{alertId} {
+      allow read, list: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // VeloraFilm validation rules
+    function isValidVeloraFilm(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() <= 200
+          && data.synopsis is string && data.synopsis.size() > 0 && data.synopsis.size() <= 4000
+          && data.genre is string && data.genre.size() > 0
+          && data.coverUrl is string && data.coverUrl.size() > 0
+          && data.videoUrl is string && data.videoUrl.size() > 0
+          && data.director is string && data.director.size() > 0;
+    }
+
+    match /velora_films/{filmId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if isSignedIn() && isValidVeloraFilm(incoming());
+      allow update: if isSignedIn() && (
+        // Allow public interactions like updating view or like counts
+        incoming().diff(existing()).affectedKeys().hasAny(['likes', 'views']) ||
+        existing().uploadedBy == request.auth.uid ||
+        isAdmin()
+      );
+      allow delete: if isAdmin() || (isSignedIn() && existing().uploadedBy == request.auth.uid);
+    }
+
+    // Wishlist collection validations & rules
+    function isValidWishlist(data) {
+      return data.id is string && data.id.size() > 0
+          && data.userId is string && data.userId == request.auth.uid
+          && data.productId is string && data.productId.size() > 0;
+    }
+
+    match /wishlists/{wishId} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && isValidWishlist(incoming());
+      allow update: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin()) && isValidWishlist(incoming());
+      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+  }
+}

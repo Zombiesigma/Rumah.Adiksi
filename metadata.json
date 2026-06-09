@@ -1,0 +1,6 @@
+{
+  "name": "Rumah Adiksi",
+  "description": "Website Komunitas Seni Pemuda Pemudi Pelabuhan Ratu - Galeri Karya, Direktori Bakat, Komunitas, Notifikasi Acara, dan Rumah Adiksi Shop.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
