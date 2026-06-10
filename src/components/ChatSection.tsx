@@ -1588,7 +1588,7 @@ export default function ChatSection({
                       </h4>
                       {typingUsers.length > 0 ? (
                         <p className="text-[10px] text-brand-accent font-sans flex items-center gap-1 font-extrabold animate-pulse">
-                          <span>✍️ Sedang mengetik...</span>
+                          <span>...</span>
                         </p>
                       ) : (
                         <p
