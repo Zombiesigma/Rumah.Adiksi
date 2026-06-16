@@ -9,7 +9,6 @@ import {
   Heart,
   Eye,
   ShoppingBag,
-  Info,
   Layers,
   Image,
   Award,
@@ -21,14 +20,12 @@ import {
   Check,
   Star,
   MessageSquare,
-  Clock,
   User,
   Trash2,
   Plus,
   X,
   Sparkles,
   ShieldAlert,
-  Flame,
   Award as AwardIcon
 } from 'lucide-react';
 import { GalleryItem } from '../types';
@@ -66,16 +63,13 @@ export default function GallerySection({
   const [shareMessage, setShareMessage] = useState('Tautan Disalin!');
   const [viewedIds, setViewedIds] = useState<string[]>([]);
 
-  // Rating Submission State
   const [ratingScore, setRatingScore] = useState<number>(5);
   const [ratingComment, setRatingComment] = useState<string>('');
   const [isSubmittingRating, setIsSubmittingRating] = useState<boolean>(false);
   const [ratingError, setRatingError] = useState<string>('');
 
-  // Awards Custom Input State
   const [customAwardText, setCustomAwardText] = useState<string>('');
 
-  // Auto-track views once per session per artwork
   useEffect(() => {
     if (selectedArtwork && !viewedIds.includes(selectedArtwork.id)) {
       setViewedIds((prev) => [...prev, selectedArtwork.id]);
@@ -86,7 +80,6 @@ export default function GallerySection({
     }
   }, [selectedArtwork?.id, viewedIds, selectedArtwork]);
 
-  // Handle direct url link sharing
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const artId = params.get('art');
@@ -114,9 +107,7 @@ export default function GallerySection({
         setIsShared(true);
         setTimeout(() => setIsShared(false), 2000);
       } catch (err) {
-        // Only fallback if the user didn't cancel the share sheet
         if (err instanceof Error && err.name !== 'AbortError') {
-          console.warn('Gagal membagikan menggunakan Web Share API, beralih ke salin tautan:', err);
           copyToClipboard(shareUrl);
         }
       }
@@ -130,9 +121,7 @@ export default function GallerySection({
       setShareMessage('Tautan Disalin!');
       setIsShared(true);
       setTimeout(() => setIsShared(false), 2000);
-    }).catch(err => {
-      console.error('Gagal menyalin tautan: ', err);
-    });
+    }).catch(err => console.error('Gagal menyalin tautan: ', err));
   };
 
   const handleLike = async (id: string, e: React.MouseEvent) => {
@@ -170,7 +159,6 @@ export default function GallerySection({
     setSelectedArtwork(null);
   };
 
-  // Submit Rating & Comments
   const handleSubmitReview = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser || !selectedArtwork) return;
@@ -198,7 +186,6 @@ export default function GallerySection({
       await updateDoc(artRef, {
         ratings: [...existingRatings, newRating]
       });
-      // Synchronize detailed selection local state
       setSelectedArtwork(prev => {
         if (!prev) return null;
         return {
@@ -216,7 +203,6 @@ export default function GallerySection({
     }
   };
 
-  // Delete comment reviews (Admins only)
   const handleDeleteReview = async (ratingId: string) => {
     if (!currentUser || userRole !== 'admin' || !selectedArtwork) return;
 
@@ -239,7 +225,6 @@ export default function GallerySection({
     }
   };
 
-  // Toggle award badges (Admins only)
   const handleToggleAward = async (awardName: string) => {
     if (!currentUser || userRole !== 'admin' || !selectedArtwork) return;
 
@@ -267,7 +252,6 @@ export default function GallerySection({
     }
   };
 
-  // Add custom curatorial recognition (Admins only)
   const handleAddCustomAward = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser || userRole !== 'admin' || !selectedArtwork || !customAwardText.trim()) return;
@@ -353,11 +337,11 @@ export default function GallerySection({
         className="space-y-8 py-6 text-white max-w-5xl mx-auto font-sans"
       >
         {/* Editorial Navigation Header */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b border-white/10 pb-5">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 border-b border-brand-gold/20 pb-5">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSelectedArtwork(null)}
-              className="group flex items-center gap-2 px-4 py-2.5 bg-neutral-900/90 hover:bg-brand-gold text-white hover:text-brand-charcoal text-xs font-bold rounded-xl transition-all duration-300 cursor-pointer select-none border border-white/10"
+              className="group flex items-center gap-2 px-4 py-2.5 bg-[#1E3932] hover:bg-brand-gold text-white hover:text-[#1E3932] text-xs font-bold rounded-xl transition-all duration-300 cursor-pointer select-none border border-brand-gold/30"
             >
               <span className="transition-transform group-hover:-translate-x-1 font-mono">←</span> Kembali ke Galeri
             </button>
@@ -370,13 +354,12 @@ export default function GallerySection({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Interactive Love Button in Sticky Header */}
             <button
               onClick={(e) => handleLike(currentArtwork.id, e)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-300 cursor-pointer select-none border ${
                 isCurrentArtworkLiked 
                   ? 'bg-rose-500/15 text-rose-400 border-rose-500/30 shadow-[0_0_12px_rgba(244,63,94,0.15)] hover:bg-rose-500/25' 
-                  : 'bg-neutral-900/80 text-gray-400 border-white/10 hover:text-rose-400 hover:border-rose-500/30'
+                  : 'bg-[#1E3932]/80 text-gray-300 border-brand-gold/20 hover:text-rose-400 hover:border-rose-500/30'
               }`}
             >
               <Heart className={`w-3.5 h-3.5 transition-transform active:scale-125 ${isCurrentArtworkLiked ? 'fill-rose-500 text-rose-500' : ''}`} />
@@ -386,7 +369,7 @@ export default function GallerySection({
             <button
               id="share-artwork-btn"
               onClick={handleShare}
-              className="flex items-center gap-2 px-4 py-2.5 bg-neutral-900/80 hover:bg-brand-gold text-white hover:text-brand-charcoal hover:border-brand-gold text-xs font-bold rounded-xl transition-all duration-300 cursor-pointer select-none border border-white/10"
+              className="flex items-center gap-2 px-4 py-2.5 bg-[#1E3932] hover:bg-brand-gold text-white hover:text-[#1E3932] hover:border-brand-gold text-xs font-bold rounded-xl transition-all duration-300 cursor-pointer select-none border border-brand-gold/20"
             >
               {isShared ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5" />}
               <span>{isShared ? shareMessage : 'Bagikan Karya'}</span>
@@ -399,8 +382,7 @@ export default function GallerySection({
           
           {/* Photo Showcase (Left Space) */}
           <div className="lg:col-span-7 space-y-5">
-            <div className="group relative bg-[#090A0E] rounded-3xl overflow-hidden border border-white/10 shadow-[0_20px_45px_-12px_rgba(0,0,0,0.85)] flex justify-center items-center p-3 sm:p-5 min-h-[340px] md:min-h-[460px] max-h-[640px] transition-all duration-500 hover:border-brand-gold/30">
-              {/* Background ambient blurring reflecting image color */}
+            <div className="group relative bg-[#0A1F1A] rounded-3xl overflow-hidden border border-brand-gold/20 shadow-[0_20px_45px_-12px_rgba(0,0,0,0.85)] flex justify-center items-center p-3 sm:p-5 min-h-[340px] md:min-h-[460px] max-h-[640px] transition-all duration-500 hover:border-brand-gold/40">
               <div 
                 className="absolute inset-0 bg-cover bg-center filter blur-3xl opacity-20 pointer-events-none scale-105 transition-all duration-500 group-hover:scale-110"
                 style={{ backgroundImage: `url(${currentArtwork.imageUrl})` }}
@@ -413,14 +395,13 @@ export default function GallerySection({
                 className="relative z-10 rounded-2xl w-full object-contain max-h-[5600] h-auto my-auto shadow-2xl transition-all duration-700 ease-out group-hover:scale-[1.01]"
               />
 
-              {/* Museum physical plaque look overlay on header */}
               <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-brand-gold/30 to-transparent pointer-events-none" />
             </div>
 
             {/* Metrics Bento Row */}
             <div className="grid grid-cols-3 gap-3">
-              <div className="bg-[#12141C] p-4 rounded-2xl border border-white/5 text-center transition-all duration-300 hover:border-white/10 flex flex-col justify-center items-center gap-1">
-                <span className="text-[9px] uppercase font-mono tracking-widest text-gray-500 font-bold">Melihat</span>
+              <div className="bg-[#1E3932]/60 p-4 rounded-2xl border border-brand-gold/10 text-center transition-all duration-300 hover:border-brand-gold/30 flex flex-col justify-center items-center gap-1">
+                <span className="text-[9px] uppercase font-mono tracking-widest text-gray-400 font-bold">Melihat</span>
                 <span className="font-mono text-lg font-black text-gray-200 flex items-center gap-1.5 mt-0.5">
                   <Eye className="w-4 h-4 text-emerald-400" /> {currentArtwork.views}
                 </span>
@@ -428,20 +409,20 @@ export default function GallerySection({
               
               <button
                 onClick={(e) => handleLike(currentArtwork.id, e)}
-                className={`bg-[#12141C] p-4 rounded-2xl border text-center transition-all duration-300 flex flex-col justify-center items-center gap-1 cursor-pointer select-none active:scale-95 ${
+                className={`bg-[#1E3932]/60 p-4 rounded-2xl border text-center transition-all duration-300 flex flex-col justify-center items-center gap-1 cursor-pointer select-none active:scale-95 ${
                   isCurrentArtworkLiked 
                     ? 'border-rose-500/20 shadow-[0_0_15px_rgba(244,63,94,0.05)] text-rose-400' 
-                    : 'border-white/5 hover:border-rose-500/20 text-gray-400 hover:text-white'
+                    : 'border-brand-gold/10 hover:border-rose-500/20 text-gray-300 hover:text-white'
                 }`}
               >
-                <span className="text-[9px] uppercase font-mono tracking-widest text-gray-500 font-bold">Suka</span>
+                <span className="text-[9px] uppercase font-mono tracking-widest text-gray-400 font-bold">Suka</span>
                 <span className="font-mono text-lg font-black flex items-center gap-1.5 mt-0.5">
                   <Heart className={`w-4 h-4 transition-all ${isCurrentArtworkLiked ? 'text-rose-500 fill-current scale-110' : 'text-gray-400'}`} /> {currentArtwork.likes}
                 </span>
               </button>
 
-              <div className="bg-[#12141C] p-4 rounded-2xl border border-white/5 text-center transition-all duration-300 hover:border-white/10 flex flex-col justify-center items-center gap-1">
-                <span className="text-[9px] uppercase font-mono tracking-widest text-gray-500 font-bold">Apresiasi</span>
+              <div className="bg-[#1E3932]/60 p-4 rounded-2xl border border-brand-gold/10 text-center transition-all duration-300 hover:border-brand-gold/30 flex flex-col justify-center items-center gap-1">
+                <span className="text-[9px] uppercase font-mono tracking-widest text-gray-400 font-bold">Apresiasi</span>
                 <span className="font-mono text-lg font-black text-brand-gold flex items-center gap-1 mt-0.5" title={`${avgScore} / 5 Bintang`}>
                   <Star className="w-4 h-4 text-brand-gold fill-current" /> {avgScore > 0 ? `${avgScore}/5` : 'Baru'}
                 </span>
@@ -450,8 +431,8 @@ export default function GallerySection({
           </div>
 
           {/* Exhibition Plaque Detailed Info Column (Right Space) */}
-          <div className="lg:col-span-5 space-y-6 bg-gradient-to-b from-[#12141C] to-[#0A0C10] p-6 rounded-3xl border border-white/5 shadow-2xl relative text-left">
-            {/* Category Indicator Badge & Identification */}
+          <div className="lg:col-span-5 space-y-6 bg-gradient-to-b from-[#1E3932]/80 to-[#0A1F1A] p-6 rounded-3xl border border-brand-gold/20 shadow-2xl relative text-left">
+            {/* Category Indicator Badge */}
             <div className="flex items-center justify-between">
               <span className="inline-flex items-center gap-1.5 text-[10px] text-brand-gold bg-brand-gold/10 px-3 py-1 rounded-md border border-brand-gold/20 font-bold uppercase tracking-widest font-mono">
                 {getCategoryIcon(currentArtwork.type)} {currentArtwork.type}
@@ -459,20 +440,18 @@ export default function GallerySection({
               <span className="text-[10px] font-mono text-gray-500 font-bold">EXHIBIT CODE #{currentArtwork.id.substring(0, 5).toUpperCase()}</span>
             </div>
 
-            {/* Main Title & Artist Card */}
             <div className="space-y-4">
               <h3 className="font-serif text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
                 {currentArtwork.title}
               </h3>
 
-              {/* Elegant Artist Card */}
-              <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-white/[0.02] rounded-2xl border border-white/5">
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-white/5 rounded-2xl border border-brand-gold/10">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-full bg-brand-gold/10 border border-brand-gold/20 flex items-center justify-center font-serif text-brand-gold text-lg font-bold shadow-md">
                     {currentArtwork.artistName.charAt(0)}
                   </div>
                   <div className="text-left">
-                    <p className="text-[9px] font-mono uppercase tracking-widest text-gray-500 font-black">Seniman Kreator</p>
+                    <p className="text-[9px] font-mono uppercase tracking-widest text-gray-400 font-black">Seniman Kreator</p>
                     <button
                       onClick={() => {
                         onExploreArtist(currentArtwork.artistId);
@@ -491,7 +470,7 @@ export default function GallerySection({
                       startChat({ userId: currentArtwork.artistId, userName: currentArtwork.artistName });
                       setSelectedArtwork(null);
                     }}
-                    className="px-3 py-1.5 bg-brand-gold/10 hover:bg-brand-gold text-brand-gold hover:text-brand-charcoal text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all duration-300 flex items-center gap-1.5 cursor-pointer border border-brand-gold/25"
+                    className="px-3 py-1.5 bg-brand-gold/10 hover:bg-brand-gold text-brand-gold hover:text-[#1E3932] text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all duration-300 flex items-center gap-1.5 cursor-pointer border border-brand-gold/25"
                     title="Mulai diskusi langsung dengan seniman"
                   >
                     <MessageSquare className="w-3.5 h-3.5" /> Tanya Seniman
@@ -500,9 +479,8 @@ export default function GallerySection({
               </div>
             </div>
 
-            {/* Official Awards Recognition - Redesigned cleanly with decorative borders */}
             {currentArtwork.awards && currentArtwork.awards.length > 0 && (
-              <div className="space-y-2.5 bg-gradient-to-r from-amber-500/10 to-transparent p-4 rounded-xl border border-brand-gold/25 relative overflow-hidden">
+              <div className="space-y-2.5 bg-brand-gold/10 p-4 rounded-xl border border-brand-gold/25 relative overflow-hidden">
                 <div className="absolute right-0 bottom-0 translate-x-3 translate-y-3 opacity-10">
                   <AwardIcon className="w-20 h-20 text-brand-gold" />
                 </div>
@@ -515,7 +493,7 @@ export default function GallerySection({
                   {currentArtwork.awards.map((awr, index) => (
                     <span 
                       key={index} 
-                      className="px-3 py-1 bg-brand-gold text-brand-charcoal text-[10px] font-sans font-black uppercase tracking-wider rounded-lg flex items-center gap-1 shadow-md shadow-brand-gold/10"
+                      className="px-3 py-1 bg-brand-gold text-[#1E3932] text-[10px] font-sans font-black uppercase tracking-wider rounded-lg flex items-center gap-1 shadow-md"
                     >
                       ★ {awr}
                     </span>
@@ -524,20 +502,18 @@ export default function GallerySection({
               </div>
             )}
 
-            {/* Narrative Info Box */}
-            <div className="space-y-2 border-t border-white/5 pt-5">
-              <h4 className="text-[10px] uppercase font-mono text-gray-500 tracking-widest font-bold">Kisah di Balik Karya:</h4>
+            <div className="space-y-2 border-t border-brand-gold/20 pt-5">
+              <h4 className="text-[10px] uppercase font-mono text-gray-400 tracking-widest font-bold">Kisah di Balik Karya:</h4>
               <p className="text-sm text-gray-300 leading-relaxed font-sans whitespace-pre-wrap pl-1 border-l-2 border-brand-gold/25">
                 {currentArtwork.description}
               </p>
             </div>
 
-            {/* Acquisition and Donation Plaque */}
-            <div className="border-t border-white/5 pt-5">
+            <div className="border-t border-brand-gold/20 pt-5">
               {currentUser ? (
-                <div className="flex items-center justify-between gap-4 p-4 bg-brand-gold/[0.04] rounded-2xl border border-brand-gold/20 shadow-inner">
+                <div className="flex items-center justify-between gap-4 p-4 bg-brand-gold/10 rounded-2xl border border-brand-gold/20 shadow-inner">
                   <div className="text-left">
-                    <span className="text-[9px] text-gray-500 uppercase font-mono tracking-wider font-black">Nilai Apresiasi</span>
+                    <span className="text-[9px] text-gray-400 uppercase font-mono tracking-wider font-black">Nilai Apresiasi</span>
                     <span className="text-xl sm:text-2xl font-serif font-black text-brand-gold block mt-0.5">
                       {formatRupiah(currentArtwork.price)}
                     </span>
@@ -545,7 +521,7 @@ export default function GallerySection({
                   {currentArtwork.price && !currentArtwork.isSold ? (
                     <button
                       onClick={() => handleAddToCart(currentArtwork)}
-                      className="flex items-center justify-center gap-2 px-5 py-3 bg-brand-gold hover:bg-white text-brand-charcoal font-black rounded-xl text-xs uppercase tracking-widest transition-all duration-300 cursor-pointer select-none active:scale-95 shadow-md hover:shadow-lg shadow-brand-gold/10"
+                      className="flex items-center justify-center gap-2 px-5 py-3 bg-brand-gold hover:bg-white text-[#1E3932] font-black rounded-xl text-xs uppercase tracking-widest transition-all duration-300 cursor-pointer select-none active:scale-95 shadow-md"
                     >
                       <ShoppingBag className="w-4 h-4 font-black" /> Koleksi Karya
                     </button>
@@ -556,8 +532,8 @@ export default function GallerySection({
                   )}
                 </div>
               ) : (
-                <div className="p-5 bg-gradient-to-b from-slate-900/40 to-slate-950/60 rounded-2xl border border-dashed border-white/10 text-center space-y-4">
-                  <div className="h-10 w-10 bg-white/5 rounded-full flex items-center justify-center mx-auto border border-white/10">
+                <div className="p-5 bg-[#1E3932]/40 rounded-2xl border border-dashed border-brand-gold/20 text-center space-y-4">
+                  <div className="h-10 w-10 bg-white/5 rounded-full flex items-center justify-center mx-auto border border-brand-gold/20">
                     <Lock className="w-4 h-4 text-gray-400"/>
                   </div>
                   <div className="space-y-1">
@@ -566,7 +542,7 @@ export default function GallerySection({
                   </div>
                   <button 
                     onClick={openAuthModal} 
-                    className="w-full py-2.5 bg-brand-gold hover:bg-white text-brand-charcoal font-black text-[10px] uppercase tracking-wider rounded-xl transition-all duration-300 cursor-pointer select-none shadow-md"
+                    className="w-full py-2.5 bg-brand-gold hover:bg-white text-[#1E3932] font-black text-[10px] uppercase tracking-wider rounded-xl transition-all duration-300 cursor-pointer select-none shadow-md"
                   >
                     Masuk Ke Galeri Kolektor
                   </button>
@@ -577,26 +553,25 @@ export default function GallerySection({
         </div>
 
         {/* Dynamic Support System: Guestbook & Curation Center */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pt-8 border-t border-white/10">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pt-8 border-t border-brand-gold/20">
           
           {/* Guestbook Section (Left Column) */}
           <div className="lg:col-span-8 space-y-6">
-            <div className="flex items-center justify-between border-b border-white/5 pb-3.5">
+            <div className="flex items-center justify-between border-b border-brand-gold/20 pb-3.5">
               <h3 className="font-serif text-xl font-bold text-white flex items-center gap-2.5 text-left">
                 <MessageSquare className="w-5 h-5 text-brand-gold" /> Ruang Apresiasi & Ulasan Kolektor
               </h3>
-              <span className="text-[10px] font-mono bg-slate-900 text-gray-300 px-3 py-1 rounded-md border border-white/5">
+              <span className="text-[10px] font-mono bg-[#1E3932] text-gray-300 px-3 py-1 rounded-md border border-brand-gold/20">
                 {starCount} Catatan Pengunjung
               </span>
             </div>
 
-            {/* List of comments / reviews */}
             <div className="space-y-4 max-h-[440px] overflow-y-auto pr-2 custom-scrollbar">
               {currentArtwork.ratings && currentArtwork.ratings.length > 0 ? (
                 currentArtwork.ratings.map((rating) => (
                   <div 
                     key={rating.id} 
-                    className="p-4 bg-[#12141C]/60 rounded-2xl border border-white/5 flex gap-3.5 relative group transition hover:border-white/10 text-left"
+                    className="p-4 bg-[#1E3932]/60 rounded-2xl border border-brand-gold/10 flex gap-3.5 relative group transition hover:border-brand-gold/30 text-left"
                   >
                     <div className="h-9 w-9 rounded-full bg-brand-gold/15 flex items-center justify-center text-brand-gold shrink-0 border border-brand-gold/10">
                       <User className="w-4 h-4" />
@@ -612,7 +587,6 @@ export default function GallerySection({
                           </span>
                         </div>
                         
-                        {/* Rating Display */}
                         <div className="flex items-center gap-0.5" title={`${rating.score} Bintang`}>
                           {[...Array(5)].map((_, i) => (
                             <Star 
@@ -627,7 +601,6 @@ export default function GallerySection({
                       </p>
                     </div>
 
-                    {/* Admin Delete Action */}
                     {userRole === 'admin' && (
                       <button 
                         onClick={() => handleDeleteReview(rating.id)}
@@ -640,19 +613,17 @@ export default function GallerySection({
                   </div>
                 ))
               ) : (
-                <div className="text-center py-12 bg-[#12141C]/20 rounded-2xl border border-dashed border-white/5 space-y-2">
-                  <p className="text-xs text-gray-500">Belum ada ulasan apresiatif untuk karya agung ini.</p>
-                  <p className="text-[10px] text-gray-600">Jadilah yang pertama untuk meninggalkan jejak apresiasi!</p>
+                <div className="text-center py-12 bg-[#1E3932]/20 rounded-2xl border border-dashed border-brand-gold/10 space-y-2">
+                  <p className="text-xs text-gray-400">Belum ada ulasan apresiatif untuk karya agung ini.</p>
+                  <p className="text-[10px] text-gray-500">Jadilah yang pertama untuk meninggalkan jejak apresiasi!</p>
                 </div>
               )}
             </div>
 
-            {/* Submission Form */}
             {currentUser ? (
-              <form onSubmit={handleSubmitReview} className="bg-[#12141C]/40 p-5 rounded-2xl border border-white/5 space-y-4 text-left">
+              <form onSubmit={handleSubmitReview} className="bg-[#1E3932]/40 p-5 rounded-2xl border border-brand-gold/20 space-y-4 text-left">
                 <h4 className="text-[10px] uppercase tracking-widest font-mono text-brand-gold font-bold">Kirim Bintang & Ulasan Anda</h4>
                 
-                {/* Score Selector (1-5 Stars) */}
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-gray-400">Penilaian:</span>
                   <div className="flex gap-2">
@@ -664,7 +635,7 @@ export default function GallerySection({
                         className="text-brand-gold transition-all duration-200 cursor-pointer scale-100 hover:scale-125 hover:rotate-6 active:scale-95 filter drop-shadow select-none"
                       >
                         <Star 
-                          className={`w-5.5 h-5.5 ${num <= ratingScore ? 'fill-current text-brand-gold' : 'text-gray-700'}`}
+                          className={`w-5.5 h-5.5 ${num <= ratingScore ? 'fill-current text-brand-gold' : 'text-gray-600'}`}
                         />
                       </button>
                     ))}
@@ -674,13 +645,12 @@ export default function GallerySection({
                   </span>
                 </div>
 
-                {/* Feedback Input */}
                 <div className="space-y-1">
                   <textarea 
                     value={ratingComment}
                     onChange={(e) => { setRatingComment(e.target.value); setRatingError(''); }}
                     placeholder="Tulis kritik beralur, kalimat pujian mendalam, atau pesan interpretasi orisinal Anda untuk mendukung seniman lokal..."
-                    className="w-full min-h-[95px] bg-slate-950/70 border border-white/10 rounded-xl p-3.5 text-xs text-white focus:outline-none focus:border-brand-gold placeholder-gray-600 resize-none font-sans"
+                    className="w-full min-h-[95px] bg-[#0A1F1A] border border-brand-gold/20 rounded-xl p-3.5 text-xs text-white focus:outline-none focus:border-brand-gold placeholder-gray-500 resize-none font-sans"
                     maxLength={350}
                   />
                   <div className="flex justify-between items-center">
@@ -697,18 +667,18 @@ export default function GallerySection({
                   <button
                     type="submit"
                     disabled={isSubmittingRating}
-                    className="px-5 py-2.5 bg-brand-gold hover:bg-white text-brand-charcoal font-black text-xs uppercase tracking-wider rounded-xl flex items-center gap-2 transition disabled:opacity-50 select-none cursor-pointer shadow-md hover:shadow-lg"
+                    className="px-5 py-2.5 bg-brand-gold hover:bg-white text-[#1E3932] font-black text-xs uppercase tracking-wider rounded-xl flex items-center gap-2 transition disabled:opacity-50 select-none cursor-pointer shadow-md"
                   >
                     {isSubmittingRating ? 'Memproses...' : 'Kirim Apresiasi'}
                   </button>
                 </div>
               </form>
             ) : (
-              <div className="p-4 bg-slate-950/15 rounded-xl border border-dashed border-white/10 text-center space-y-2">
+              <div className="p-4 bg-[#1E3932]/20 rounded-xl border border-dashed border-brand-gold/10 text-center space-y-2">
                 <p className="text-xs text-gray-400">Ingin memberikan ulasan apresiatif Anda?</p>
                 <button 
                   onClick={openAuthModal}
-                  className="px-4 py-2 bg-brand-gold text-brand-charcoal hover:bg-white text-xs font-black rounded-lg transition select-none cursor-pointer"
+                  className="px-4 py-2 bg-brand-gold text-[#1E3932] hover:bg-white text-xs font-black rounded-lg transition select-none cursor-pointer"
                 >
                   Masuk / Daftar Anonim
                 </button>
@@ -718,7 +688,7 @@ export default function GallerySection({
 
           {/* Exhibition Deck Definitions (Right Column) */}
           <div className="lg:col-span-4 space-y-6 text-left">
-            <div className="border-b border-white/5 pb-3">
+            <div className="border-b border-brand-gold/20 pb-3">
               <h3 className="font-serif text-xl font-bold text-white flex items-center gap-2">
                 <Award className="w-5 h-5 text-brand-gold" /> Galeri Kurasi Resmi
               </h3>
@@ -729,7 +699,6 @@ export default function GallerySection({
                 Setiap karya terpilih melewati penyaringan komite Rumah Adiksi Creative Lab untuk menjaga orisinalitas tinggi, apresiasi budaya pesisir, serta mendukung martabat kedaulatan seniman Pelabuhan Ratu.
               </p>
 
-              {/* Predefined Awards list with statuses */}
               <div className="space-y-3 pt-1">
                 {predefinedAwards.map((item, id) => {
                   const isAwardGranted = currentArtwork.awards?.includes(item.name);
@@ -739,7 +708,7 @@ export default function GallerySection({
                       className={`p-3 rounded-xl border transition-all duration-300 ${
                         isAwardGranted 
                           ? 'bg-brand-gold/10 border-brand-gold/30 text-white shadow-sm' 
-                          : 'bg-slate-950/20 border-white/5 opacity-50'
+                          : 'bg-[#1E3932]/20 border-brand-gold/10 opacity-50'
                       }`}
                     >
                       <div className="flex items-center justify-between">
@@ -755,10 +724,9 @@ export default function GallerySection({
               </div>
             </div>
 
-            {/* CURATOR ADMINISTRATIVE PANEL (Only Visible to Admin role) */}
             {userRole === 'admin' && (
-              <div className="bg-slate-950/80 p-5 rounded-2xl border border-brand-gold/25 space-y-4 shadow-xl">
-                <div className="flex items-center gap-2 text-brand-gold font-mono text-[11px] font-bold uppercase tracking-wider pb-1.5 border-b border-white/10">
+              <div className="bg-[#1E3932]/80 p-5 rounded-2xl border border-brand-gold/25 space-y-4 shadow-xl">
+                <div className="flex items-center gap-2 text-brand-gold font-mono text-[11px] font-bold uppercase tracking-wider pb-1.5 border-b border-brand-gold/20">
                   <Sparkles className="w-4 h-4 text-brand-gold" /> Direksi Kurator Eksklusif
                 </div>
                 
@@ -766,7 +734,6 @@ export default function GallerySection({
                   Admin dapat memberikan tanda kepelbagaian kebudayaan instan di bawah ini:
                 </p>
 
-                {/* Badge Triggers */}
                 <div className="grid grid-cols-2 gap-2">
                   {predefinedAwards.map((item, idx) => {
                     const active = currentArtwork.awards?.includes(item.name);
@@ -776,8 +743,8 @@ export default function GallerySection({
                         onClick={() => handleToggleAward(item.name)}
                         className={`p-2.5 rounded-xl text-[10px] font-bold tracking-tight text-center transition cursor-pointer select-none flex flex-col justify-center items-center gap-1.5 border ${
                           active 
-                            ? 'bg-brand-gold text-brand-charcoal font-black border-brand-gold shadow-[0_4px_12px_rgba(235,166,42,0.15)]' 
-                            : 'bg-black/30 text-gray-400 hover:text-white border-white/5 hover:bg-white/5'
+                            ? 'bg-brand-gold text-[#1E3932] font-black border-brand-gold shadow-[0_4px_12px_rgba(235,166,42,0.15)]' 
+                            : 'bg-[#0A1F1A] text-gray-400 hover:text-white border-brand-gold/20 hover:bg-brand-gold/10'
                         }`}
                       >
                         <span className="text-xs">{item.name.split(' ')[0]}</span>
@@ -787,8 +754,7 @@ export default function GallerySection({
                   })}
                 </div>
 
-                {/* Add Custom Badge */}
-                <form onSubmit={handleAddCustomAward} className="pt-3 border-t border-white/10 space-y-2">
+                <form onSubmit={handleAddCustomAward} className="pt-3 border-t border-brand-gold/20 space-y-2">
                   <label className="text-[10px] font-mono uppercase text-gray-400 block font-bold">Terbitkan Gelar Baru:</label>
                   <div className="flex gap-2">
                     <input 
@@ -796,11 +762,11 @@ export default function GallerySection({
                       value={customAwardText}
                       onChange={(e) => setCustomAwardText(e.target.value)}
                       placeholder="Contoh: 🏆 Masterpiece 2026"
-                      className="bg-black/40 border border-white/10 rounded-xl px-2.5 py-1.5 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-brand-gold flex-1 min-w-0 font-sans"
+                      className="bg-[#0A1F1A] border border-brand-gold/20 rounded-xl px-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-brand-gold flex-1 min-w-0 font-sans"
                     />
                     <button
                       type="submit"
-                      className="p-1.5 bg-brand-gold hover:bg-white text-brand-charcoal rounded-xl transition duration-300 cursor-pointer select-none flex-shrink-0"
+                      className="p-1.5 bg-brand-gold hover:bg-white text-[#1E3932] rounded-xl transition duration-300 cursor-pointer select-none flex-shrink-0"
                       title="Tambahkan Gelar Baru"
                     >
                       <Plus className="w-4 h-4 font-bold" />
@@ -837,7 +803,6 @@ export default function GallerySection({
         </div>
         
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
-          {/* Dropdown Filter for sorting */}
           <div className="flex items-center gap-2 bg-white py-2 px-4 rounded-full border border-gray-250 text-xs text-gray-600 shadow-sm">
             <span className="font-sans text-gray-400 whitespace-nowrap">Urutkan:</span>
             <select
@@ -890,7 +855,6 @@ export default function GallerySection({
                 className="group relative flex flex-col justify-between bg-white rounded-3xl border border-gray-200 hover:border-brand-accent/40 overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 cursor-pointer"
                 onClick={() => setSelectedArtwork(art)}
               >
-                {/* Labels Left */}
                 <div className="absolute top-3 left-3 z-10 flex flex-col gap-1.5 items-start">
                   <span className="flex items-center gap-1.5 text-[10px] uppercase font-sans font-bold bg-white/95 text-brand-accent px-2.5 py-1 rounded-full border border-gray-200 shadow-sm">
                     {getCategoryIcon(art.type)} {art.type}
@@ -905,7 +869,6 @@ export default function GallerySection({
                   )}
                 </div>
 
-                {/* Like Button */}
                 <motion.button
                   whileHover={{ scale: 1.1 }}
                   whileTap={{ scale: 1.4 }}
@@ -925,7 +888,6 @@ export default function GallerySection({
                   </motion.div>
                 </motion.button>
 
-                {/* Aspect Cover Image */}
                 <div className="relative aspect-[4/3] overflow-hidden bg-gray-50 border-b border-gray-150">
                   <img
                     src={art.imageUrl}
@@ -936,7 +898,6 @@ export default function GallerySection({
                   />
                 </div>
 
-                {/* Header Information */}
                 <div className="p-5 flex-grow flex flex-col justify-between space-y-4">
                   <div className="space-y-1.5">
                     <h3 className="font-sans text-lg font-extrabold text-brand-green group-hover:text-brand-accent transition-colors line-clamp-1">
@@ -953,7 +914,6 @@ export default function GallerySection({
                       <span className="flex items-center gap-1" title={`${art.views || 0} Melihat`}><Eye className="w-3.5 h-3.5" /> {art.views || 0}</span>
                       <span className="flex items-center gap-1" title={`${art.likes || 0} Suka`}><Heart className={`w-3.5 h-3.5 ${hasLiked ? 'text-rose-500 fill-current' : ''}`} /> {art.likes || 0}</span>
                       
-                      {/* Star rating preview */}
                       {avgScore > 0 && (
                         <span className="flex items-center gap-0.5 text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full border border-amber-200" title={`Rata-rata ulasan bintang: ${avgScore}`}>
                           <Star className="w-3 h-3 fill-current text-amber-500" /> {avgScore}
